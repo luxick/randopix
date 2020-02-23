@@ -1,15 +1,21 @@
-import httpClient, json
+import os, httpClient, json, threadpool
 import gintro/[gtk, glib, gobject, gio, gdkpixbuf]
 
-var
-  client = newHttpClient()
+var 
   window: ApplicationWindow
   fullscreen = true
 
 const 
   floofUrl = "https://randomfox.ca/floof/"
+  updateTime = 300
+
+type ImageProvider =  
+  tuple[
+    get: proc(): Pixbuf
+  ]
 
 proc downloadImage(): Pixbuf =
+  let client = newHttpClient()
   let urlData = client.getContent(floofUrl)
   let info = parseJson(urlData)
   let imageData = client.getContent(info["image"].getStr)
@@ -17,23 +23,26 @@ proc downloadImage(): Pixbuf =
   discard loader.write(imageData)
   loader.getPixbuf()
 
-proc resizeImage(pixbuf: Pixbuf): Pixbuf = 
-  var wWidth, wHeight, width, height: int
-  window.getSize(wWidth, wHeight)
-
-  if (wWidth > wHeight):
-    height = wHeight
+proc resizeImage(pixbuf: Pixbuf, maxWidth, maxHeight: int): Pixbuf = 
+  var width, height: int
+  if (maxWidth > maxHeight):
+    height = maxHeight
     width = ((pixbuf.width * height) / pixbuf.height).toInt 
   else:
-    width = wWidth
+    width = maxWidth
     height = ((pixbuf.height * width) / pixbuf.width).toInt
 
   pixbuf.scaleSimple(width, height, InterpType.bilinear)
 
-proc updateImage(action: SimpleAction; parameter: Variant; widget: Image) =
+proc replaceImage(widget: Image, width, height: int) = 
   var pixbuf = downloadImage()
-  pixbuf = pixbuf.resizeImage()
+  pixbuf = pixbuf.resizeImage(width, height)
   widget.setFromPixbuf(pixbuf)
+
+proc updateCommand(action: SimpleAction; parameter: Variant; widget: Image) =
+  var width, height: int
+  window.getSize(width, height)
+  replaceImage(widget, width, height)
 
 proc toggleFullscreen(action: SimpleAction; parameter: Variant; window: ApplicationWindow) =
   if fullscreen:
@@ -44,11 +53,18 @@ proc toggleFullscreen(action: SimpleAction; parameter: Variant; window: Applicat
 
 proc quit(action: SimpleAction; parameter: Variant; app: Application) = 
     app.quit()
+
+proc runUpdater(window: ApplicationWindow, image: Image) = 
+  echo "Start Updater"
+  var width, height: int
+  window.getSize(width, height)
+  spawn replaceImage(image, width, height)
   
 proc appActivate(app: Application) =
   window = newApplicationWindow(app)
   window.title = "Randopics"
   window.setKeepAbove(true)
+
   let cssProvider = newCssProvider()
   let data = "window { background: black; }"
   discard cssProvider.loadFromData(data)
@@ -57,6 +73,7 @@ proc appActivate(app: Application) =
 
   let imageWidget = newImage()
   window.add(imageWidget)
+  window.connect("show", runUpdater, imageWidget)
 
   if fullscreen:
     window.fullscreen
@@ -71,10 +88,10 @@ proc appActivate(app: Application) =
   app.setAccelsForAction("win.quit", "Escape")
   window.actionMap.addAction(quitAction)
 
-  let updateImageAction = newSimpleAction("update")
-  discard updateImageAction.connect("activate", updateImage, imageWidget)
+  let updateAction = newSimpleAction("update")
+  discard updateAction.connect("activate", updateCommand, imageWidget)
   app.setAccelsForAction("win.update", "U")
-  window.actionMap.addAction(updateImageAction)
+  window.actionMap.addAction(updateAction)
 
   window.showAll
 
