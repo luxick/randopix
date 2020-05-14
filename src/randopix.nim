@@ -1,6 +1,7 @@
 import httpClient, json, os, options, strformat
 import gintro/[gtk, glib, gobject, gio, gdkpixbuf]
 import argparse except run
+import fileAccess
 
 const
   version = "0.1"
@@ -9,7 +10,8 @@ const
 type
   Mode {.pure.} = enum
     Foxes = "foxes"     ## Some nice foxes
-    Inspiro = "inspiro" ## Inspiring nonsense 
+    Inspiro = "inspiro" ## Inspiring nonsense
+    File = "file"       ## Images from a local path
 
 var
   client = newHttpClient()
@@ -17,9 +19,11 @@ var
   imageWidget: Image
   fullscreen = true
   mode: Option[Mode]
+  fileProvider: FileProvider
   argParser = newParser("randopix"):
     help(fmt"Version {version} - Display random images from different sources")
-    option("-m", "--mode", help="foxes, inspiro, inspiro-xmas")
+    option("-m", "--mode", help="foxes, file, inspiro, inspiro-xmas")
+    option("-p", "--path", help="('file' mode only) Path to a directory with images")
     flag("-w", "--windowed", help="Do not start in fullscreen mode")
 
 proc downloadFox(): Pixbuf =
@@ -29,6 +33,11 @@ proc downloadFox(): Pixbuf =
   let loader = newPixbufLoader()
   discard loader.write(imageData)
   loader.getPixbuf()
+
+
+proc getLocalImage(): Pixbuf = 
+  ## let the file provider serve another image
+  fileProvider.next.newPixbufFromFile
 
 proc resizeImage(pixbuf: Pixbuf): Pixbuf = 
   var wWidth, wHeight, width, height: int
@@ -50,6 +59,8 @@ proc getImage(): Option[Pixbuf] =
       result = some(downloadFox())
     of Mode.Inspiro:
       echo "Not Implemented"
+    of Mode.File:
+      result = some(getLocalImage())
 
 proc updateImage(action: SimpleAction; parameter: Variant;) =
   let data = getImage();
@@ -100,6 +111,9 @@ proc parseArgs(): void =
       mode = some(parseEnum[Mode](opts.mode))
     except ValueError:
       echo "Invaild image source: ", opts.mode
+  
+  if (mode.isSome and mode.get == Mode.File):
+    fileProvider = newFileProvider(opts.path)
 
 proc appActivate(app: Application) =
   parseArgs()
@@ -109,7 +123,7 @@ proc appActivate(app: Application) =
     return
 
   window = newApplicationWindow(app)
-  window.title = "Randopics"
+  window.title = "randopix"
   window.setKeepAbove(true)
   window.setDefaultSize(600, 600)
 
@@ -126,6 +140,6 @@ proc appActivate(app: Application) =
   window.showAll
 
 when isMainModule:
-  let app = newApplication("org.gtk.example")
+  let app = newApplication("org.luxick.randopix")
   connect(app, "activate", appActivate)
   discard run(app)
