@@ -19,7 +19,7 @@ var
   mode: Option[Mode]
   argParser = newParser("randopix"):
     help(fmt"Version {version} - Display random images from different sources")
-    option("-m", "--mode", help="One of these: foxes, inspiro, inspiro-xmas")
+    option("-m", "--mode", help="foxes, inspiro, inspiro-xmas")
     flag("-w", "--windowed", help="Do not start in fullscreen mode")
 
 proc downloadFox(): Pixbuf =
