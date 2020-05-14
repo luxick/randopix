@@ -9,10 +9,13 @@ srcDir        = "src"
 bin           = @["randopics"]
 
 # Dependencies
-requires "nim >= 1.0.0", "gintro <= 0.5.5"
+requires "nim >= 1.0.0", "gintro <= 0.5.5", "argparse >=0.10.1"
 
 task debug, "Compile debug version":
-  exec "nim c --out:bin/randopics src/randopics.nim"
+  exec "nim c -d:debug --debugger:native --out:bin/randopics src/randopics.nim"
+
+task r, "Compile and run":
+  exec "nim c -r --out:bin/randopics src/randopics.nim"
 
 task release, "Compile release version":
   exec fmt"nim c -d:release --out:bin/{version}/randopics src/randopics.nim"
