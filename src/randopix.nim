@@ -1,7 +1,8 @@
 import httpClient, json, os, options, strformat
 import gintro/[gtk, glib, gobject, gio, gdkpixbuf]
+import gintro/gdk except Window
 import argparse except run
-import fileAccess
+import fileAccess, style
 
 const
   version = "0.1"
@@ -13,18 +14,62 @@ type
     Inspiro = "inspiro" ## Inspiring nonsense
     File = "file"       ## Images from a local path
 
+  Args = object
+    fullscreen: bool    ## Applicaion is show in fullscreen mode
+    verbose: bool       ## More debug information in notification label
+    mode: Option[Mode]  ## The chosen image source
+    path: string        ## File mode only: the path to the images
+
 var
-  client = newHttpClient()
+  client = newHttpClient()    ## For loading images from the web
+  fileProvider: FileProvider  ## Gets images from the chosen source
+  args: Args                  ## The parsed command line args
+  # Widgets
   window: ApplicationWindow
   imageWidget: Image
-  fullscreen = true
-  mode: Option[Mode]
-  fileProvider: FileProvider
-  argParser = newParser("randopix"):
+  label: Label
+
+proc enumToStrings(en: typedesc): seq[string] = 
+  for x in en:
+    result.add $x
+
+proc notify(label: Label, message: string = "") =
+  ## Shows the notification box in the lower left corner.
+  ## If no message is passed, the box will be hidden
+  label.text = message
+  if (message == ""):
+    label.hide
+  else:
+    label.show
+
+proc newArgs(): Args =
+  let p = newParser("randopix"):
     help(fmt"Version {version} - Display random images from different sources")
-    option("-m", "--mode", help="foxes, file, inspiro, inspiro-xmas")
-    option("-p", "--path", help="('file' mode only) Path to a directory with images")
+    option("-m", "--mode", help="The image source mode.", choices=enumToStrings(Mode))
+    option("-p", "--path", help="Path to a directory with images ('file' mode only)")
     flag("-w", "--windowed", help="Do not start in fullscreen mode")
+    flag("-v", "--verbose", help="Show more information")
+  let opts = p.parse(commandLineParams())
+  var mode: Option[Mode]  
+  if (opts.mode == ""):
+    echo p.help
+    return
+
+  try:
+    mode = some(parseEnum[Mode](opts.mode))
+  except ValueError:
+    echo fmt"Invaild mode: {opts.mode}"
+    echo p.help
+    return
+
+  if (mode.get == Mode.File):
+    fileProvider = newFileProvider(opts.path)
+
+  Args(
+    fullscreen: not opts.windowed,
+    verbose: opts.verbose,
+    mode: mode,
+    path: opts.path)
 
 proc downloadFox(): Pixbuf =
   let urlData = client.getContent(floofUrl)
@@ -34,27 +79,15 @@ proc downloadFox(): Pixbuf =
   discard loader.write(imageData)
   loader.getPixbuf()
 
-
 proc getLocalImage(): Pixbuf = 
   ## let the file provider serve another image
   fileProvider.next.newPixbufFromFile
 
-proc resizeImage(pixbuf: Pixbuf): Pixbuf = 
-  var wWidth, wHeight, width, height: int
-  window.getSize(wWidth, wHeight)
-
-  if (wWidth > wHeight):
-    height = wHeight
-    width = ((pixbuf.width * height) / pixbuf.height).toInt 
-  else:
-    width = wWidth
-    height = ((pixbuf.height * width) / pixbuf.width).toInt
-
-  pixbuf.scaleSimple(width, height, InterpType.bilinear)
-
-proc getImage(): Option[Pixbuf] = 
-  if mode.isSome:
-    case mode.get
+proc tryGetImage(): Option[Pixbuf] =
+  ## Get the raw image from an image provider
+  ## The kind of image is based on the command line args
+  if args.mode.isSome:
+    case args.mode.get
     of Mode.Foxes:
       result = some(downloadFox())
     of Mode.Inspiro:
@@ -63,27 +96,40 @@ proc getImage(): Option[Pixbuf] =
       result = some(getLocalImage())
 
 proc updateImage(action: SimpleAction; parameter: Variant;) =
-  let data = getImage();
-  if (data.isNone): return
-  var pixbuf = data.get().resizeImage()
+  ## Updates the UI with a new image
+  # Loading new image
+  let data = tryGetImage();
+  if data.isNone:
+    label.notify "No image to display..."
+    return;
+
+  ## Resize image to best fit the window 
+  var pixbuf = data.get()
+  var wWidth, wHeight, width, height: int
+  window.getSize(wWidth, wHeight)
+  if (wWidth > wHeight):
+    height = wHeight
+    width = ((pixbuf.width * height) / pixbuf.height).toInt 
+  else:
+    width = wWidth
+    height = ((pixbuf.height * width) / pixbuf.width).toInt
+  pixbuf = pixbuf.scaleSimple(width, height, InterpType.bilinear)
+
+  # Update the UI with the image
   imageWidget.setFromPixbuf(pixbuf)
+  label.notify
 
 proc toggleFullscreen(action: SimpleAction; parameter: Variant; window: ApplicationWindow) =
-  if fullscreen:
+  ## Fullscreen toggle event
+  if args.fullscreen:
     window.unfullscreen
   else:
     window.fullscreen
-  fullscreen = not fullscreen
+  args.fullscreen = not args.fullscreen
 
-proc quit(action: SimpleAction; parameter: Variant; app: Application) = 
-    app.quit()
-
-proc applyStyle(window: Window) =
-  let cssProvider = newCssProvider()
-  let data = "window { background: black; }"
-  discard cssProvider.loadFromData(data)
-  let styleContext = window.getStyleContext()
-  styleContext.addProvider(cssProvider, STYLE_PROVIDER_PRIORITY_USER)
+proc quit(action: SimpleAction; parameter: Variant; app: Application) =
+  ## Application quit event
+  app.quit()
   
 proc connectSignals(app: Application) =
   ## Connect th GTK signals to the procs 
@@ -102,38 +148,35 @@ proc connectSignals(app: Application) =
   app.setAccelsForAction("win.update", "U")
   window.actionMap.addAction(updateImageAction)
 
-proc parseArgs(): void =
-  ## Parse and apply options from the command line
-  let opts = argparser.parse(commandLineParams())
-  fullscreen = not opts.windowed
-  if (opts.mode != ""):
-    try:
-      mode = some(parseEnum[Mode](opts.mode))
-    except ValueError:
-      echo "Invaild image source: ", opts.mode
-  
-  if (mode.isSome and mode.get == Mode.File):
-    fileProvider = newFileProvider(opts.path)
 
 proc appActivate(app: Application) =
-  parseArgs()
+  # Parse arguments from the command line
+  args = newArgs()
   # No mode was given, exit and display the help text
-  if (mode.isNone):
-    echo argParser.help
-    return
+  if (args.mode.isNone): return
 
   window = newApplicationWindow(app)
   window.title = "randopix"
   window.setKeepAbove(true)
-  window.setDefaultSize(600, 600)
+  window.setDefaultSize(800, 600)
 
-  # Custom styling for e.g. the background color
-  window.applyStyle
+  # Custom styling for e.g. the background color CSS data is in the "style.nim" module 
+  let provider = newCssProvider()
+  discard provider.loadFromData(css)
+  addProviderForScreen(getDefaultScreen(), provider, STYLE_PROVIDER_PRIORITY_USER)
 
+  # Create all windgets we are gonna use
+  var overlay = newOverlay()
   imageWidget = newImage()
-  window.add(imageWidget)
+  label = newLabel("Starting...")
+  label.halign = Align.`end`
+  label.valign = Align.`end`
+
+  overlay.addOverlay(label)
+  overlay.add(imageWidget)
+  window.add(overlay)
   
-  if fullscreen:
+  if args.fullscreen:
     window.fullscreen
 
   app.connectSignals

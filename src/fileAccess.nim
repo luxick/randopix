@@ -1,4 +1,8 @@
 import os, sets, random
+
+const
+  supportedExts = @[".png", ".jpg", ".jpeg"]
+
 type
   FileProvider* = ref object
     exts: HashSet[string]
@@ -25,5 +29,5 @@ proc next*(fp: FileProvider): string =
   fp.files.delete(0)
 
 proc newFileProvider*(path: string): FileProvider =
-  result = FileProvider(path: path, exts: [".png", ".jpg", ".jpeg"].toHashSet)
+  result = FileProvider(path: path, exts: supportedExts.toHashSet)
   result.load
