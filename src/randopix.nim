@@ -2,9 +2,10 @@ import httpClient, json, os, options, strformat
 import gintro/[gtk, glib, gobject, gio, gdkpixbuf]
 import gintro/gdk except Window
 import argparse except run
-import fileAccess, style
+import fileAccess
 
 const
+  css = slurp("app.css")
   version = "0.1"
   floofUrl = "https://randomfox.ca/floof/"
 
