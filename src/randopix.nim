@@ -1,31 +1,22 @@
-import httpClient, json, os, options, strformat
+import os, options, strformat
 import gintro/[gtk, glib, gobject, gio, gdkpixbuf]
 import gintro/gdk except Window
 import argparse except run
-import fileAccess
+import providers
 
 const
   css = slurp("app.css")
   version = "0.1"
-  floofUrl = "https://randomfox.ca/floof/"
 
 type
-  Mode {.pure.} = enum
-    Foxes = "foxes"     ## Some nice foxes
-    Inspiro = "inspiro" ## Inspiring nonsense
-    File = "file"       ## Images from a local path
-
   Args = object
     fullscreen: bool    ## Applicaion is show in fullscreen mode
     verbose: bool       ## More debug information in notification label
-    mode: Option[Mode]  ## The chosen image source
-    path: string        ## File mode only: the path to the images
     timeout: int        ## Milliseconds between image refreshes
 
 var
-  client = newHttpClient()    ## For loading images from the web
-  fileProvider: FileProvider  ## Gets images from the chosen source
-  args: Args                  ## The parsed command line args
+  imageProvider: ImageProvider  ## Gets images from the chosen source
+  args: Args                    ## The parsed command line args
   # Widgets
   window: ApplicationWindow
   imageWidget: Image
@@ -44,79 +35,46 @@ proc notify(label: Label, message: string = "") =
   else:
     label.show
 
-proc newArgs(): Args =
+proc newArgs(): Option[Args] =
   let p = newParser("randopix"):
     help(fmt"Version {version} - Display random images from different sources")
-    option("-m", "--mode", help="The image source mode.", choices=enumToStrings(Mode))
+    option("-m", "--mode", help="The image source mode.", choices=enumToStrings(ProviderKind))
     option("-p", "--path", help="Path to a directory with images ('file' mode only)")
     option("-t", "--timeout", help="Seconds before the image is refreshed", default="300")
     flag("-w", "--windowed", help="Do not start in fullscreen mode")
     flag("-v", "--verbose", help="Show more information")
-  let opts = p.parse(commandLineParams())
-  var mode: Option[Mode]  
-  if (opts.mode == ""):
-    echo p.help
-    return
 
   try:
-    mode = some(parseEnum[Mode](opts.mode))
-  except ValueError:
-    echo fmt"Invaild mode: {opts.mode}"
+    let opts = p.parse(commandLineParams())
+    let mode = some(parseEnum[ProviderKind](opts.mode))
+    imageProvider = newImageProvider(mode.get, opts.path)
+    ## Timeout is given in seconds as an argument
+    var timeout = 3000
+    try:
+      timeout = opts.timeout.parseInt * 1000    
+    except ValueError:
+      raise newException(UsageError, fmt"Invalid timeout value: {opts.timeout}")
+
+    return some(Args(
+      fullscreen: not opts.windowed,
+      verbose: opts.verbose,
+      timeout: timeout))
+  except UsageError:
+    echo getCurrentExceptionMsg()
     echo p.help
-    return
-
-  if (mode.get == Mode.File):
-    fileProvider = newFileProvider(opts.path)
-
-  ## Timeout is given in seconds as an argument
-  var timeout = 3000
-  try:
-    timeout = opts.timeout.parseInt * 1000    
-  except ValueError:
-    echo "Invalid timeout: ", opts.timeout
-
-  Args(
-    fullscreen: not opts.windowed,
-    verbose: opts.verbose,
-    mode: mode,
-    path: opts.path,
-    timeout: timeout)
-
-proc downloadFox(): Pixbuf =
-  let urlData = client.getContent(floofUrl)
-  let info = parseJson(urlData)
-  let imageData = client.getContent(info["image"].getStr)
-  let loader = newPixbufLoader()
-  discard loader.write(imageData)
-  loader.getPixbuf()
-
-proc getLocalImage(): Pixbuf = 
-  ## let the file provider serve another image
-  fileProvider.next.newPixbufFromFile
-
-proc tryGetImage(): Option[Pixbuf] =
-  ## Get the raw image from an image provider
-  ## The kind of image is based on the command line args
-  if args.mode.isSome:
-    case args.mode.get
-    of Mode.Foxes:
-      result = some(downloadFox())
-    of Mode.Inspiro:
-      echo "Not Implemented"
-    of Mode.File:
-      result = some(getLocalImage())
 
 proc updateImage(): bool =
   ## Updates the UI with a new image
   # Loading new image
   try:
     if (args.verbose): echo "Refreshing..."
-    let data = tryGetImage();
+    # TODO better error signalling from providers.nim
+    let data = some(imageProvider.next)
     if data.isNone:
       label.notify "No image to display..."
       return false;
 
-    ## Resize image to best fit the window 
+    ## Resize image to best fit the window
     var pixbuf = data.get()
     var wWidth, wHeight, width, height: int
     window.getSize(wWidth, wHeight)
@@ -186,9 +144,11 @@ proc connectSignals(app: Application) =
 
 proc appActivate(app: Application) =
   # Parse arguments from the command line
-  args = newArgs()
-  # No mode was given, exit and display the help text
-  if (args.mode.isNone): return
+  let parsed = newArgs()
+  if parsed.isNone:
+    return
+  else:
+    args = parsed.get
 
   window = newApplicationWindow(app)
   window.title = "randopix"
