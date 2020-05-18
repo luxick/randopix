@@ -20,6 +20,7 @@ type
     verbose: bool       ## More debug information in notification label
     mode: Option[Mode]  ## The chosen image source
     path: string        ## File mode only: the path to the images
+    timeout: int        ## Milliseconds between image refreshes
 
 var
   client = newHttpClient()    ## For loading images from the web
@@ -48,6 +49,7 @@ proc newArgs(): Args =
     help(fmt"Version {version} - Display random images from different sources")
     option("-m", "--mode", help="The image source mode.", choices=enumToStrings(Mode))
     option("-p", "--path", help="Path to a directory with images ('file' mode only)")
+    option("-t", "--timeout", help="Seconds before the image is refreshed", default="300")
     flag("-w", "--windowed", help="Do not start in fullscreen mode")
     flag("-v", "--verbose", help="Show more information")
   let opts = p.parse(commandLineParams())
@@ -66,11 +68,19 @@ proc newArgs(): Args =
   if (mode.get == Mode.File):
     fileProvider = newFileProvider(opts.path)
 
+  ## Timeout is given in seconds as an argument
+  var timeout = 3000
+  try:
+    timeout = opts.timeout.parseInt * 1000    
+  except ValueError:
+    echo "Invalid timeout: ", opts.timeout
+
   Args(
     fullscreen: not opts.windowed,
     verbose: opts.verbose,
     mode: mode,
-    path: opts.path)
+    path: opts.path,
+    timeout: timeout)
 
 proc downloadFox(): Pixbuf =
   let urlData = client.getContent(floofUrl)
@@ -96,29 +106,54 @@ proc tryGetImage(): Option[Pixbuf] =
     of Mode.File:
       result = some(getLocalImage())
 
-proc updateImage(action: SimpleAction; parameter: Variant;) =
+proc updateImage(): bool =
   ## Updates the UI with a new image
   # Loading new image
-  let data = tryGetImage();
-  if data.isNone:
-    label.notify "No image to display..."
-    return;
+  try:
+    if (args.verbose): echo "Refreshing..."
+    let data = tryGetImage();
+    if data.isNone:
+      label.notify "No image to display..."
+      return false;
 
-  ## Resize image to best fit the window 
-  var pixbuf = data.get()
-  var wWidth, wHeight, width, height: int
-  window.getSize(wWidth, wHeight)
-  if (wWidth > wHeight):
-    height = wHeight
-    width = ((pixbuf.width * height) / pixbuf.height).toInt 
+    ## Resize image to best fit the window 
+    var pixbuf = data.get()
+    var wWidth, wHeight, width, height: int
+    window.getSize(wWidth, wHeight)
+    if (wWidth > wHeight):
+      height = wHeight
+      width = ((pixbuf.width * height) / pixbuf.height).toInt 
+    else:
+      width = wWidth
+      height = ((pixbuf.height * width) / pixbuf.width).toInt
+    pixbuf = pixbuf.scaleSimple(width, height, InterpType.bilinear)
+
+    # Update the UI with the image
+    imageWidget.setFromPixbuf(pixbuf)
+    if (args.verbose):
+      label.notify "New image set"
+    else:
+      label.notify
+    return true
+
+  except:
+    let
+      e = getCurrentException()
+      msg = getCurrentExceptionMsg()
+    echo "Got exception ", repr(e), " with message ", msg
+    return false
+
+proc forceUpdate(action: SimpleAction; parameter: Variant;) =
+  discard updateImage()
+
+proc timedUpdate(image: Widget): bool = 
+  let ok = updateImage();
+  if ok:
+    return true;
   else:
-    width = wWidth
-    height = ((pixbuf.height * width) / pixbuf.width).toInt
-  pixbuf = pixbuf.scaleSimple(width, height, InterpType.bilinear)
-
-  # Update the UI with the image
-  imageWidget.setFromPixbuf(pixbuf)
-  label.notify
+    label.notify "Error while refreshing image, retrying..."
+    discard timeoutAdd(uint32(args.timeout), timedUpdate, imageWidget)
+    return false
 
 proc toggleFullscreen(action: SimpleAction; parameter: Variant; window: ApplicationWindow) =
   ## Fullscreen toggle event
@@ -145,10 +180,9 @@ proc connectSignals(app: Application) =
   window.actionMap.addAction(quitAction)
 
   let updateImageAction = newSimpleAction("update")
-  discard updateImageAction.connect("activate", updateImage)
+  discard updateImageAction.connect("activate", forceUpdate)
   app.setAccelsForAction("win.update", "U")
   window.actionMap.addAction(updateImageAction)
-
 
 proc appActivate(app: Application) =
   # Parse arguments from the command line
@@ -182,6 +216,9 @@ proc appActivate(app: Application) =
 
   app.connectSignals
   window.showAll
+
+  discard updateImage()
+  discard timeoutAdd(uint32(args.timeout), timedUpdate, imageWidget)
 
 when isMainModule:
   let app = newApplication("org.luxick.randopix")
