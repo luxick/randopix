@@ -11,7 +11,7 @@ const
   version = "0.1"
 
 type
-  Args = object
+  Args = ref object
     fullscreen: bool    ## Applicaion is show in fullscreen mode
     verbose: bool       ## More debug information in notification label
     timeout: int        ## Milliseconds between image refreshes
@@ -43,7 +43,7 @@ proc newArgs(): Option[Args] =
   let p = newParser("randopix"):
     help(fmt"Version {version} - Display random images from different sources")
     option("-m", "--mode", help="The image source mode.", choices=enumToStrings(ProviderKind))
-    option("-p", "--path", help="Path to a directory with images ('file' mode only)")
+    option("-p", "--path", help="Path to a directory with images for the 'file' mode")
     option("-t", "--timeout", help="Seconds before the image is refreshed", default="300")
     flag("-w", "--windowed", help="Do not start in fullscreen mode")
     flag("-v", "--verbose", help="Show more information")
@@ -124,10 +124,14 @@ proc checkServerChannel(parameter: string): bool =
     echo "Main app got message: ", msg.command
 
     case msg.command
-    of Command.Refresh:
+    of cRefresh:
       discard updateImage()
+    of cTimeout:
+      let val = msg.parameter.parseInt * 1000
+      echo "Setting timeout to ", val
+      args.timeout = val
     else:
-      echo "Command ignored", msg.command
+      echo "Command ignored: ", msg.command
 
   sleep(100)
   result = false

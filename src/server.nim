@@ -8,7 +8,7 @@ proc closeServer*() =
   ## Sends a "Close" command to the server
   var socket = newSocket()
   socket.connect("127.0.0.1", Port(defaultPort))
-  let c = newCommand(Command.Close)
+  let c = newCommand(cClose)
   socket.send(c.wrap)
   socket.close()
 
@@ -32,7 +32,7 @@ proc runServer*() =
       var jsonData = parseJson(line)
       let msg = jsonData.to(CommandMessage)
       case msg.command
-      of Command.Close:
+      of cClose:
         echo "Server recieved termination command. Exiting."
         break
       else:
