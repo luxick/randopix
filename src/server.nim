@@ -1,4 +1,4 @@
-import net, json, marshal
+import net, json
 import commands
 
 var 
@@ -9,23 +9,28 @@ proc closeServer*() =
   var socket = newSocket()
   socket.connect("127.0.0.1", Port(defaultPort))
   let c = newCommand(Command.Close)
-  socket.send($(%c))
+  socket.send(c.wrap)
   socket.close()
 
 proc runServer*() = 
-  var socket = newSocket()
-  socket.bindAddr(Port(defaultPort))
-  socket.listen()
+  var server = newSocket()
+  server.bindAddr(Port(defaultPort))
+  server.listen()
   echo "Control server is listening"
 
   while true:    
     # Process client requests
     var client = newSocket()
-    socket.accept(client)
-    echo("Incomming client")
+    server.accept(client)
+    echo("Client connected")
     try:
       var line = client.recvLine()
-      let msg = to[CommandMessage](line)
+      if line == "":
+        echo "No data from client"
+        continue
+      
+      var jsonData = parseJson(line)
+      let msg = jsonData.to(CommandMessage)
       case msg.command
       of Command.Close:
         echo "Server recieved termination command. Exiting."
@@ -37,4 +42,6 @@ proc runServer*() =
     except OSError:
       echo "Server error: ", getCurrentExceptionMsg()
     except:
-      echo "Invalid command from client"
+      echo "Invalid command from client: ", getCurrentExceptionMsg()
+      echo repr(getCurrentException())
+  server.close()

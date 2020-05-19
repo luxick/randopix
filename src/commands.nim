@@ -1,4 +1,4 @@
-
+import json
 const
   defaultPort* = 5555     ## Default port at which the control server will run
 
@@ -13,3 +13,6 @@ type
 
 proc newCommand*(c: Command, p: string = ""): CommandMessage =
   CommandMessage(command: c, parameter: p)
+
+proc wrap*(msg: CommandMessage): string =
+  $(%msg) & "\r\L"

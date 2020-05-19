@@ -129,6 +129,7 @@ proc checkServerChannel(parameter: string): bool =
     else:
       echo "Command ignored", msg.command
 
+  sleep(100)
   result = false
   discard idleAdd(checkServerChannel, parameter)
 
