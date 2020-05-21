@@ -1,5 +1,5 @@
 import os, sets, random, httpClient, json, strformat
-import gintro/[gdkpixbuf, gobject, gtk]
+import gintro/[gdkpixbuf, gobject]
 import commands
 
 const
@@ -28,7 +28,6 @@ type
 
 var
   client = newHttpClient()  ## For loading images from the web
-  verbose = true
 
 ########################
 # Constructors
@@ -64,8 +63,8 @@ proc newFileOpResult(file: string): FileOpResult =
 # Utilities
 ########################
 
-proc log(msg: string) =
-  if verbose: echo msg
+proc log(ip: ImageProvider, msg: string) =
+  if ip.verbose: echo msg
 
 ########################
 # Image Provider procs
@@ -81,10 +80,10 @@ proc getFox(ip: ImageProvider): FileOpResult =
     writeFile(dlFile, imageData)
     return newFileOpResult(dlFile)
   except JsonParsingError:
-    log fmt"Error while fetching from fox API: {getCurrentExceptionMsg()}"
+    ip.log fmt"Error while fetching from fox API: {getCurrentExceptionMsg()}"
     return newFileOpResultError("Json parsing error")
   except KeyError:
-    log fmt"No image in downloaded data: {getCurrentExceptionMsg()}"
+    ip.log fmt"No image in downloaded data: {getCurrentExceptionMsg()}"
     return newFileOpResultError("No image from API")
 
 proc getLocalFile(ip: var ImageProvider): FileOpResult =
@@ -94,12 +93,12 @@ proc getLocalFile(ip: var ImageProvider): FileOpResult =
   if ip.files.len < 1:    
     if ip.path == "":
       return newFileOpResultError("No path for image loading")
-    log "Reloading file list..."
+    ip.log "Reloading file list..."
     for file in walkDirRec(ip.path):
       let split = splitFile(file)
       if ip.exts.contains(split.ext):
         ip.files.add(file)
-    log fmt"Loaded {ip.files.len} files"
+    ip.log fmt"Loaded {ip.files.len} files"
     shuffle(ip.files)
   # Remove the current file after 
   result = newFileOpResult(ip.files[0])

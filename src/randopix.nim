@@ -1,5 +1,5 @@
 import os, options, strformat
-import gintro/[glib, gobject, gdkpixbuf, gtk, gio]
+import gintro/[glib, gobject, gtk, gio]
 import gintro/gdk except Window
 import argparse except run
 import providers, server, commands
@@ -21,11 +21,15 @@ var
   window: ApplicationWindow
   label: Label
   # Server vor recieving commands from external tools
-  serverWorker: system.Thread[void]
+  serverWorker: system.Thread[ServerArgs]
 
 proc enumToStrings(en: typedesc): seq[string] = 
   for x in en:
     result.add $x
+
+proc log(things: varargs[string, `$`]) =
+  if args.verbose:
+    echo things.join()
 
 proc notify(label: Label, message: string = "") =
   ## Shows the notification box in the lower left corner.
@@ -67,7 +71,7 @@ proc newArgs(): Option[Args] =
 proc updateImage(image: Image): bool =
   ## Updates the UI with a new image
   try:
-    if (args.verbose): echo "Refreshing..."
+    if (args.verbose): log "Refreshing..."
 
     var wWidth, wHeight: int
     window.getSize(wWidth, wHeight)
@@ -82,7 +86,7 @@ proc updateImage(image: Image): bool =
     let
       e = getCurrentException()
       msg = getCurrentExceptionMsg()
-    echo "Got exception ", repr(e), " with message ", msg
+    log "Got exception ", repr(e), " with message ", msg
     return false
 
 proc forceUpdate(action: SimpleAction; parameter: Variant; image: Image) =
@@ -103,17 +107,17 @@ proc checkServerChannel(image: Image): bool =
 
   if tried.dataAvailable:
     let msg: CommandMessage = tried.msg
-    echo "Main app got message: ", msg.command
+    log "Main app got message: ", msg.command
 
     case msg.command
     of cRefresh:
       discard updateImage(image)
     of cTimeout:
       let val = msg.parameter.parseInt * 1000
-      echo "Setting timeout to ", val
+      log "Setting timeout to ", val
       args.timeout = val
     else:
-      echo "Command ignored: ", msg.command
+      log "Command ignored: ", msg.command
 
   sleep(100)
   result = true
@@ -129,11 +133,11 @@ proc toggleFullscreen(action: SimpleAction; parameter: Variant; window: Applicat
 
 proc cleanUp(w: ApplicationWindow, app: Application) =
   ## Stop the control server and exit the GTK application
-  echo "Stopping control server..."
+  log "Stopping control server..."
   closeServer()  
   serverWorker.joinThread()
   chan.close()
-  echo "Server stopped."
+  log "Server stopped."
   app.quit()
 
 proc quit(action: SimpleAction; parameter: Variant; app: Application) =
@@ -199,7 +203,8 @@ proc appActivate(app: Application) =
   chan.open()
 
   ## Start the server for handling incoming commands
-  createThread(serverWorker, runServer)
+  let serverArgs = newServerArgs(args.verbose)
+  createThread(serverWorker, runServer, serverArgs)
   discard idleAdd(checkServerChannel, image)
 
 when isMainModule:
