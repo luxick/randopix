@@ -1,17 +1,23 @@
-import os, sets, random, httpClient, json
-import gintro/[gdkpixbuf]
+import os, sets, random, httpClient, json, strformat
+import gintro/[gdkpixbuf, gobject, gtk]
+import commands
 
 const
   supportedExts = @[".png", ".jpg", ".jpeg"]
   foxesUrl = "https://randomfox.ca/floof/"
+  tmpFile = "/tmp/randopix_tmp.png"
 
 type
-  ProviderKind* {.pure.} = enum
-    Foxes = "foxes"     ## Some nice foxes
-    Inspiro = "inspiro" ## Inspiring nonsense
-    File = "file"       ## Images from a local path
+  FileOpResult* = object of OpResult
+    file*: string
 
-  ImageProvider* = ref object
+  ProviderKind* {.pure.} = enum
+    Foxes = "foxes"       ## Some nice foxes
+    Inspiro = "inspiro"   ## Inspiring nonsense
+    File = "file"         ## Images from a local path
+
+  ImageProvider* = ref object of RootObj
+    verbose: bool
     case kind: ProviderKind
     of ProviderKind.Foxes, ProviderKind.Inspiro:
       url: string
@@ -20,49 +26,25 @@ type
       path*: string
       files*: seq[string]
 
-var client = newHttpClient()  ## For loading images from the web
+var
+  client = newHttpClient()  ## For loading images from the web
+  verbose = true
 
-proc downloadFox(ip: ImageProvider): Pixbuf =
-  ## Download image from the fox API
-  let urlData = client.getContent(ip.url)
-  let info = parseJson(urlData)
-  let imageData = client.getContent(info["image"].getStr)
-  let loader = newPixbufLoader()
-  discard loader.write(imageData)
-  loader.getPixbuf()
-
-proc reloadFileList(ip: ImageProvider) =
-  ## Reload the file list
-  if ip.path == "":
-    return
-
-  for file in walkDirRec(ip.path):
-    let split = splitFile(file)
-    if ip.exts.contains(split.ext):
-      ip.files.add(file)
-  
-  randomize()
-  shuffle(ip.files)
-
-proc next*(ip: ImageProvider): Pixbuf =
-  ## Return a new image from the chosen image source
-  case ip.kind
-  of ProviderKind.Foxes, ProviderKind.Inspiro:
-    return ip.downloadFox
-  of ProviderKind.File:
-    if ip.files.len < 1:
-      ip.reloadFileList
-    result = ip.files[0].newPixbufFromFile
-    ip.files.delete(0)
+########################
+# Constructors
+########################
 
 proc newFileProvider(path: string): ImageProvider =
+  ## Create an image provider to access images from the local file system 
+  randomize()
   result = ImageProvider(kind: ProviderKind.File, path: path, exts: supportedExts.toHashSet)
-  result.reloadFileList
 
-proc newFoxProvider(): ImageProvider = ImageProvider(kind: ProviderKind.Foxes, url: foxesUrl)
+proc newFoxProvider(): ImageProvider =
+  ## Create an image provider to access the API at "https://randomfox.ca/floof/".
+  ImageProvider(kind: ProviderKind.Foxes, url: foxesUrl)
 
 proc newImageProvider*(kind: ProviderKind, filePath: string = ""): ImageProvider =
-  ## Create a new `ImageProvider` for the API chosen with thge `kind` parameter 
+  ## Create a new `ImageProvider` for the API.
   case kind
   of ProviderKind.Foxes:
     newFoxProvider()
@@ -71,3 +53,96 @@ proc newImageProvider*(kind: ProviderKind, filePath: string = ""): ImageProvider
     newFoxProvider()
   of ProviderKind.File:
     newFileProvider(filePath)
+
+proc newFileOpResultError(msg: string): FileOpResult =
+  FileOpResult(success: false, errorMsg: msg)
+
+proc newFileOpResult(file: string): FileOpResult =
+  FileOpResult(success: true, file: file)
+
+########################
+# Utilities
+########################
+
+proc log(msg: string) =
+  if verbose: echo msg
+
+########################
+# Image Provider procs
+########################
+
+proc getFox(ip: ImageProvider): FileOpResult =
+  ## Download image from the fox API
+  try:
+    let urlData = client.getContent(ip.url)
+    let info = parseJson(urlData)
+    let imageData = client.getContent(info["image"].getStr)
+    let dlFile = fmt"{tmpFile}.download"
+    writeFile(dlFile, imageData)
+    return newFileOpResult(dlFile)
+  except JsonParsingError:
+    log fmt"Error while fetching from fox API: {getCurrentExceptionMsg()}"
+    return newFileOpResultError("Json parsing error")
+  except KeyError:
+    log fmt"No image in downloaded data: {getCurrentExceptionMsg()}"
+    return newFileOpResultError("No image from API")
+
+proc getLocalFile(ip: var ImageProvider): FileOpResult =
+  ## Provide an image from a local folder
+  # First, check if there are still images left to be loaded.
+  # If not reread all files from the path
+  if ip.files.len < 1:    
+    if ip.path == "":
+      return newFileOpResultError("No path for image loading")
+    log "Reloading file list..."
+    for file in walkDirRec(ip.path):
+      let split = splitFile(file)
+      if ip.exts.contains(split.ext):
+        ip.files.add(file)
+    log fmt"Loaded {ip.files.len} files"
+    shuffle(ip.files)
+  # Remove the current file after 
+  result = newFileOpResult(ip.files[0])
+  ip.files.delete(0)
+
+proc getFileName(ip: var ImageProvider): FileOpResult =
+  ## Get the temporary file name of the next file to display
+  case ip.kind
+  of ProviderKind.File:
+    result = ip.getLocalFile()
+  of ProviderKind.Foxes:
+    result = ip.getFox()
+  else:
+    result = newFileOpResultError("Not implemented")
+
+########################
+# Exported procs
+########################
+
+proc next*(ip: var ImageProvider, width, height: int): FileOpResult =
+  ## Uses the image provider to get a new image ready to display.
+  ## `width` and `height` should be the size of the window.
+  let op = ip.getFileName()
+  if not op.success: return op
+
+  var rawPixbuf = newPixbufFromFile(op.file)
+  # resize the pixbuf to best fit on screen
+  var w, h: int
+  if (width > height):
+    h = height
+    w = ((rawPixbuf.width * h) / rawPixbuf.height).toInt 
+  else:
+    w = width
+    h = ((rawPixbuf.height * w) / rawPixbuf.width).toInt
+  var pixbuf = rawPixbuf.scaleSimple(w, h, InterpType.bilinear)
+  # The pixbuf is written to disk and loaded again once because
+  # directly setting the image from a pixbuf will leak memory
+  let saved = pixbuf.savev(tmpFile, "png", @[])
+  if not saved:
+    return newFileOpResultError("Error while saving temporary image")
+
+  # GTK pixbuf leaks memory when not manually decreasing reference count
+  pixbuf.genericGObjectUnref()
+  rawPixbuf.genericGObjectUnref()
+
+  newFileOpResult(tmpFile)

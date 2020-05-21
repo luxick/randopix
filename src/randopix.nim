@@ -1,8 +1,6 @@
 import os, options, strformat
-import gintro/[glib, gobject, gdkpixbuf]
+import gintro/[glib, gobject, gdkpixbuf, gtk, gio]
 import gintro/gdk except Window
-import gintro/gtk except newSocket, Socket
-import gintro/gio except Socket
 import argparse except run
 import providers, server, commands
 
@@ -21,7 +19,6 @@ var
   args: Args                    ## The parsed command line args
   # Widgets
   window: ApplicationWindow
-  imageWidget: Image
   label: Label
   # Server vor recieving commands from external tools
   serverWorker: system.Thread[void]
@@ -67,37 +64,20 @@ proc newArgs(): Option[Args] =
     echo getCurrentExceptionMsg()
     echo p.help
 
-proc updateImage(): bool =
+proc updateImage(image: Image): bool =
   ## Updates the UI with a new image
-  # Loading new image
   try:
     if (args.verbose): echo "Refreshing..."
-    # TODO better error signalling from providers.nim
-    let data = some(imageProvider.next)
-    if data.isNone:
-      label.notify "No image to display..."
-      return false;
 
-    ## Resize image to best fit the window
-    var pixbuf = data.get()
-    var wWidth, wHeight, width, height: int
+    var wWidth, wHeight: int
     window.getSize(wWidth, wHeight)
-    if (wWidth > wHeight):
-      height = wHeight
-      width = ((pixbuf.width * height) / pixbuf.height).toInt 
-    else:
-      width = wWidth
-      height = ((pixbuf.height * width) / pixbuf.width).toInt
-    pixbuf = pixbuf.scaleSimple(width, height, InterpType.bilinear)
 
-    # Update the UI with the image
-    imageWidget.setFromPixbuf(pixbuf)
-    if (args.verbose):
-      label.notify "New image set"
+    let op = imageProvider.next(wWidth, wHeight)
+    result = op.success
+    if op.success:
+      image.setFromFile(op.file)
     else:
-      label.notify
-    return true
-
+      label.notify op.errorMsg
   except:
     let
       e = getCurrentException()
@@ -105,17 +85,19 @@ proc updateImage(): bool =
     echo "Got exception ", repr(e), " with message ", msg
     return false
 
-proc forceUpdate(action: SimpleAction; parameter: Variant;) =
-  discard updateImage()
+proc forceUpdate(action: SimpleAction; parameter: Variant; image: Image) =
+  discard updateImage(image)
 
-proc timedUpdate(image: Widget): bool = 
-  let ok = updateImage();
+proc timedUpdate(image: Image): bool = 
+  let ok = updateImage(image);
   if not ok:
     label.notify "Error while refreshing image, retrying..."
-  discard timeoutAdd(uint32(args.timeout), timedUpdate, imageWidget)
+  else:
+    label.notify
+  discard timeoutAdd(uint32(args.timeout), timedUpdate, image)
   return false
 
-proc checkServerChannel(parameter: string): bool =
+proc checkServerChannel(image: Image): bool =
   ## Check the channel from the control server for incomming commands
   let tried = chan.tryRecv()
 
@@ -125,7 +107,7 @@ proc checkServerChannel(parameter: string): bool =
 
     case msg.command
     of cRefresh:
-      discard updateImage()
+      discard updateImage(image)
     of cTimeout:
       let val = msg.parameter.parseInt * 1000
       echo "Setting timeout to ", val
@@ -134,8 +116,8 @@ proc checkServerChannel(parameter: string): bool =
       echo "Command ignored: ", msg.command
 
   sleep(100)
-  result = false
-  discard idleAdd(checkServerChannel, parameter)
+  result = true
+  # discard idleAdd(checkServerChannel, parameter)
 
 proc toggleFullscreen(action: SimpleAction; parameter: Variant; window: ApplicationWindow) =
   ## Fullscreen toggle event
@@ -158,25 +140,6 @@ proc quit(action: SimpleAction; parameter: Variant; app: Application) =
   ## Application quit event
   cleanUp(window, app)
   
-proc connectSignals(app: Application) =
-  ## Connect the GTK signals to the procs 
-  let fullscreenAction = newSimpleAction("fullscreen")
-  discard fullscreenAction.connect("activate", toggleFullscreen, window)
-  app.setAccelsForAction("win.fullscreen", "F")
-  window.actionMap.addAction(fullscreenAction)
-
-  let quitAction = newSimpleAction("quit")
-  discard quitAction.connect("activate", quit, app)
-  app.setAccelsForAction("win.quit", "Escape")
-  window.actionMap.addAction(quitAction)
-
-  let updateImageAction = newSimpleAction("update")
-  discard updateImageAction.connect("activate", forceUpdate)
-  app.setAccelsForAction("win.update", "U")
-  window.actionMap.addAction(updateImageAction)
-
-  window.connect("destroy", cleanUp, app)
-
 proc appActivate(app: Application) =
   # Parse arguments from the command line
   let parsed = newArgs()
@@ -196,31 +159,48 @@ proc appActivate(app: Application) =
   addProviderForScreen(getDefaultScreen(), provider, STYLE_PROVIDER_PRIORITY_USER)
 
   # Create all windgets we are gonna use
-  var overlay = newOverlay()
-  imageWidget = newImage()
   label = newLabel("Starting...")
   label.halign = Align.`end`
   label.valign = Align.`end`
 
-  overlay.addOverlay(label)
-  overlay.add(imageWidget)
-  window.add(overlay)
+  let container = newOverlay()
+  container.addOverlay(label)
+  window.add(container)
   
+  let image = newImage()
+  container.add(image)
+
   if args.fullscreen:
     window.fullscreen
 
-  app.connectSignals
+  ## Connect the GTK signals to the procs 
+  let fullscreenAction = newSimpleAction("fullscreen")
+  discard fullscreenAction.connect("activate", toggleFullscreen, window)
+  app.setAccelsForAction("win.fullscreen", "F")
+  window.actionMap.addAction(fullscreenAction)
+
+  let quitAction = newSimpleAction("quit")
+  discard quitAction.connect("activate", quit, app)
+  app.setAccelsForAction("win.quit", "Escape")
+  window.actionMap.addAction(quitAction)
+
+  let updateImageAction = newSimpleAction("update")
+  discard updateImageAction.connect("activate", forceUpdate, image)
+  app.setAccelsForAction("win.update", "U")
+  window.actionMap.addAction(updateImageAction)
+
+  window.connect("destroy", cleanUp, app)
+
   window.showAll
 
-  discard timeoutAdd(500, timedUpdate, imageWidget)
+  var timerId = timeoutAdd(500, timedUpdate, image)
 
   ## open communication channel from the control server
   chan.open()
 
   ## Start the server for handling incoming commands
   createThread(serverWorker, runServer)
-  var tag = ""
-  discard idleAdd(checkServerChannel, tag)
+  discard idleAdd(checkServerChannel, image)
 
 when isMainModule:
   let app = newApplication("org.luxick.randopix")
