@@ -17,6 +17,7 @@ type
 var
   imageProvider: ImageProvider  ## Gets images from the chosen source
   args: Args                    ## The parsed command line args
+  updateTimeout: int            ## ID of the timeout that updates the images
   # Widgets
   window: ApplicationWindow
   label: Label
@@ -89,17 +90,20 @@ proc updateImage(image: Image): bool =
     log "Got exception ", repr(e), " with message ", msg
     return false
 
-proc forceUpdate(action: SimpleAction; parameter: Variant; image: Image) =
-  discard updateImage(image)
-
 proc timedUpdate(image: Image): bool = 
   let ok = updateImage(image);
   if not ok:
     label.notify "Error while refreshing image, retrying..."
   else:
     label.notify
-  discard timeoutAdd(uint32(args.timeout), timedUpdate, image)
+  updateTimeout = int(timeoutAdd(uint32(args.timeout), timedUpdate, image))
   return false
+
+proc forceUpdate(action: SimpleAction; parameter: Variant; image: Image): void =
+  log "Force refreshing image now"
+  if updateTimeout > 0:
+    discard updateTimeout.remove
+  discard image.timedUpdate()
 
 proc checkServerChannel(image: Image): bool =
   ## Check the channel from the control server for incomming commands
@@ -111,11 +115,13 @@ proc checkServerChannel(image: Image): bool =
 
     case msg.command
     of cRefresh:
-      discard updateImage(image)
+      forceUpdate(nil, nil, image)
     of cTimeout:
       let val = msg.parameter.parseInt * 1000
       log "Setting timeout to ", val
       args.timeout = val
+      discard updateTimeout.remove
+      updateTimeout = int(timeoutAdd(uint32(args.timeout), timedUpdate, image))
     else:
       log "Command ignored: ", msg.command
 
@@ -197,8 +203,8 @@ proc appActivate(app: Application) =
 
   window.showAll
 
-  var timerId = timeoutAdd(500, timedUpdate, image)
-
+  # Setting the inital image
+  forceUpdate(nil, nil, image)
   ## open communication channel from the control server
   chan.open()
 
