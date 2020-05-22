@@ -204,7 +204,9 @@ proc appActivate(app: Application) =
   window.showAll
 
   # Setting the inital image
-  forceUpdate(nil, nil, image)
+  # Fix 1 second timeout to make sure all other initialization has finished
+  updateTimeout = int(timeoutAdd(1000, timedUpdate, image))
+
   ## open communication channel from the control server
   chan.open()
 
