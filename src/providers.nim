@@ -5,6 +5,7 @@ import commands
 const
   supportedExts = @[".png", ".jpg", ".jpeg"]
   foxesUrl = "https://randomfox.ca/floof/"
+  inspiroUrl = "http://inspirobot.me/api?generate=true"
   tmpFile = "/tmp/randopix_tmp.png"
 
 type
@@ -38,6 +39,10 @@ proc newFileProvider(path: string): ImageProvider =
   randomize()
   result = ImageProvider(kind: ProviderKind.File, path: path, exts: supportedExts.toHashSet)
 
+proc newInspiroProvider(): ImageProvider =
+  ## Create an image provider for the inspiro bot API
+  ImageProvider(kind: ProviderKind.Inspiro, url: inspiroUrl)
+
 proc newFoxProvider(): ImageProvider =
   ## Create an image provider to access the API at "https://randomfox.ca/floof/".
   ImageProvider(kind: ProviderKind.Foxes, url: foxesUrl)
@@ -48,8 +53,7 @@ proc newImageProvider*(kind: ProviderKind, filePath: string = ""): ImageProvider
   of ProviderKind.Foxes:
     newFoxProvider()
   of ProviderKind.Inspiro:
-    # TODO
-    newFoxProvider()
+    newInspiroProvider()
   of ProviderKind.File:
     newFileProvider(filePath)
 
@@ -86,6 +90,19 @@ proc getFox(ip: ImageProvider): FileOpResult =
     ip.log fmt"No image in downloaded data: {getCurrentExceptionMsg()}"
     return newFileOpResultError("No image from API")
 
+proc getInspiro(ip: ImageProvider): FileOpResult =
+  ## Download and save image from the inspiro API
+  try:
+    let imageUrl = client.getContent(ip.url)
+    ip.log fmt"Downloading inspiro image from: '{imageUrl}'"
+    let imageData = client.getContent(imageUrl)
+    let dlFile = fmt"{tmpFile}.download"
+    writeFile(dlFile,imageData)
+    return newFileOpResult(dlFile)
+  except:
+    ip.log fmt"Unexpected error while downloading: {getCurrentExceptionMsg()}"
+    return newFileOpResultError(getCurrentExceptionMsg())
+
 proc getLocalFile(ip: var ImageProvider): FileOpResult =
   ## Provide an image from a local folder
   # First, check if there are still images left to be loaded.
@@ -108,11 +125,12 @@ proc getFileName(ip: var ImageProvider): FileOpResult =
   ## Get the temporary file name of the next file to display
   case ip.kind
   of ProviderKind.File:
-    result = ip.getLocalFile()
+    return ip.getLocalFile()
   of ProviderKind.Foxes:
-    result = ip.getFox()
-  else:
-    result = newFileOpResultError("Not implemented")
+    return ip.getFox()
+  of ProviderKind.Inspiro:
+    return ip.getInspiro()
+  return newFileOpResultError("Not implemented")
 
 ########################
 # Exported procs
