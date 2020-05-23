@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Install GTK packages
-      run: sudo apt install gir1.2-gtk-3.0
+      run: sudo apt install gir1.2-gtk-3.0 gir1.2-graphene-1.0 gir1.2-gtksource-3.0 gir1.2-vte-2.91 gir1.2-notify-0.7 gir1.2-gst-plugins-bad-1.0
     - uses: actions/checkout@master
     - name: Cache choosenim
       id: cache-choosenim
