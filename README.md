@@ -8,10 +8,10 @@ randopix
 Version 0.1 - Display random images from different sources
 
 Usage:
-  randopix [options] 
+  randopix [options]
 
 Options:
-  -m, --mode=MODE            The image source mode. Possible values: [foxes, inspiro, file]
+  -m, --mode=MODE            The image source mode. Possible values: [none, foxes, inspiro, file]
   -p, --path=PATH            Path to a directory with images for the 'file' mode
   -t, --timeout=TIMEOUT      Seconds before the image is refreshed (default: 300)
   -w, --windowed             Do not start in fullscreen mode
@@ -33,12 +33,12 @@ Commands:
 
   refresh          Force image refresh now
   timeout          Set timeout in seconds before a new image is displayed
+  mode             Change the display mode. Possible values: [none, foxes, inspiro, file]
 
 Options:
   -s, --server=SERVER        Host running the randopix server (default: 127.0.0.1)
   -p, --port=PORT            Port to connect to the randopix server (default: 5555)
   -h, --help                 Show this help
-
 ```
 ## Build
 Install the [Nim Compiler](https://nim-lang.org/install.html).
