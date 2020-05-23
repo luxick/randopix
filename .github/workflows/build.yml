@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Install GTK packages
-      run: sudo apt-get install build-essential libgtk-3-0
+      run: sudo apt-get install gnome-devel
     - uses: actions/checkout@master
     - name: Cache choosenim
       id: cache-choosenim
