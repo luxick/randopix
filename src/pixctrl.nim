@@ -2,6 +2,8 @@ import strutils, net
 import argparse
 import common
 
+const modeHelp = "Change the display mode. Possible values: [$1]" % Mode.enumToStrings().join(", ")
+
 var socket = newSocket()
 
 proc sendCommand*(server, port: string, msg: CommandMessage) =
@@ -15,7 +17,7 @@ proc switchMode*(server, port: string, mode: string) =
     discard parseEnum[Mode](mode)
   except ValueError:
     echo "Invalid mode: ", mode
-    echo "Accepted modes: ", enumToStrings(Mode).join(", ")
+    echo "Possible values: [$1]" % Mode.enumToStrings().join(", ")
     return
   let c = newCommand(cMode, mode)
   sendCommand(server, port, c)
@@ -40,7 +42,7 @@ when isMainModule:
         sendCommand(opts.parentOpts.server, opts.parentOpts.port, c)
 
     command($cMode):
-      help("Change the display mode of the server")
+      help(modeHelp)
       arg("mode")
       run:
         switchMode(opts.parentOpts.server, opts.parentOpts.port, opts.mode)
