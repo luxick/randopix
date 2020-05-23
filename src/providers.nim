@@ -1,4 +1,4 @@
-import os, sets, random, httpClient, json, strformat
+import os, sets, random, httpClient, json, strformat, options
 import gintro/[gdkpixbuf, gobject]
 import commands
 
@@ -12,20 +12,19 @@ type
   FileOpResult* = object of OpResult
     file*: string
 
-  ProviderKind* {.pure.} = enum
+  Mode* {.pure.} = enum   ## Options for the display mode
+    None = "none"         ## No images will be displayed
     Foxes = "foxes"       ## Some nice foxes
     Inspiro = "inspiro"   ## Inspiring nonsense
     File = "file"         ## Images from a local path
 
   ImageProvider* = ref object of RootObj
-    verbose: bool
-    case kind: ProviderKind
-    of ProviderKind.Foxes, ProviderKind.Inspiro:
-      url: string
-    of ProviderKind.File:
-      exts: HashSet[string]
-      path*: string
-      files*: seq[string]
+    ## Manages images that should be displayed
+    verbose: bool         ## Additional logging for the image provider
+    mode* : Mode          ## Selects the API that is used to get images
+    path*: Option[string] ## Path on the local file syetem that will be used in `file` mode
+    exts: HashSet[string] ## Allowed extensions that the `file` mode will display
+    files: seq[string]    ## Currently loaded list of images in `file` mode
 
 var
   client = newHttpClient()  ## For loading images from the web
@@ -34,28 +33,21 @@ var
 # Constructors
 ########################
 
-proc newFileProvider(path: string): ImageProvider =
-  ## Create an image provider to access images from the local file system 
+proc newImageProvider(verbose: bool, mode: Mode, path: Option[string]): ImageProvider =
   randomize()
-  result = ImageProvider(kind: ProviderKind.File, path: path, exts: supportedExts.toHashSet)
+  ImageProvider(verbose: verbose, mode: mode, path: path, exts: supportedExts.toHashSet)
 
-proc newInspiroProvider(): ImageProvider =
-  ## Create an image provider for the inspiro bot API
-  ImageProvider(kind: ProviderKind.Inspiro, url: inspiroUrl)
+proc newImageProvider*(verbose: bool): ImageProvider =
+  newImageProvider(verbose, Mode.None, none(string))
 
-proc newFoxProvider(): ImageProvider =
-  ## Create an image provider to access the API at "https://randomfox.ca/floof/".
-  ImageProvider(kind: ProviderKind.Foxes, url: foxesUrl)
+proc newImageProvider*(verbose: bool, path: string): ImageProvider =
+  newImageProvider(verbose, Mode.None, some(path))
 
-proc newImageProvider*(kind: ProviderKind, filePath: string = ""): ImageProvider =
-  ## Create a new `ImageProvider` for the API.
-  case kind
-  of ProviderKind.Foxes:
-    newFoxProvider()
-  of ProviderKind.Inspiro:
-    newInspiroProvider()
-  of ProviderKind.File:
-    newFileProvider(filePath)
+proc newImageProvider*(verbose: bool, mode: Mode): ImageProvider =
+  newImageProvider(verbose, mode, none(string))
+
+proc newImageProvider*(verbose: bool, mode: Mode, path: string): ImageProvider =
+  newImageProvider(verbose, mode, some(path))
 
 proc newFileOpResultError(msg: string): FileOpResult =
   FileOpResult(success: false, errorMsg: msg)
@@ -77,7 +69,7 @@ proc log(ip: ImageProvider, msg: string) =
 proc getFox(ip: ImageProvider): FileOpResult =
   ## Download image from the fox API
   try:
-    let urlData = client.getContent(ip.url)
+    let urlData = client.getContent(foxesUrl)
     let info = parseJson(urlData)
     let imageData = client.getContent(info["image"].getStr)
     let dlFile = fmt"{tmpFile}.download"
@@ -93,7 +85,7 @@ proc getFox(ip: ImageProvider): FileOpResult =
 proc getInspiro(ip: ImageProvider): FileOpResult =
   ## Download and save image from the inspiro API
   try:
-    let imageUrl = client.getContent(ip.url)
+    let imageUrl = client.getContent(inspiroUrl)
     ip.log fmt"Downloading inspiro image from: '{imageUrl}'"
     let imageData = client.getContent(imageUrl)
     let dlFile = fmt"{tmpFile}.download"
@@ -105,32 +97,35 @@ proc getInspiro(ip: ImageProvider): FileOpResult =
 
 proc getLocalFile(ip: var ImageProvider): FileOpResult =
   ## Provide an image from a local folder
+
   # First, check if there are still images left to be loaded.
   # If not reread all files from the path
-  if ip.files.len < 1:    
-    if ip.path == "":
+  if ip.files.len < 1:
+    if ip.path.isNone:
       return newFileOpResultError("No path for image loading")
     ip.log "Reloading file list..."
-    for file in walkDirRec(ip.path):
+    for file in walkDirRec(ip.path.get):
       let split = splitFile(file)
       if ip.exts.contains(split.ext):
         ip.files.add(file)
     ip.log fmt"Loaded {ip.files.len} files"
     shuffle(ip.files)
-  # Remove the current file after 
+
+  # Remove the current file after
   result = newFileOpResult(ip.files[0])
   ip.files.delete(0)
 
 proc getFileName(ip: var ImageProvider): FileOpResult =
   ## Get the temporary file name of the next file to display
-  case ip.kind
-  of ProviderKind.File:
+  case ip.mode
+  of Mode.File:
     return ip.getLocalFile()
-  of ProviderKind.Foxes:
+  of Mode.Foxes:
     return ip.getFox()
-  of ProviderKind.Inspiro:
+  of Mode.Inspiro:
     return ip.getInspiro()
-  return newFileOpResultError("Not implemented")
+  else:
+    return newFileOpResultError("Not implemented")
 
 ########################
 # Exported procs
@@ -139,6 +134,9 @@ proc getFileName(ip: var ImageProvider): FileOpResult =
 proc next*(ip: var ImageProvider, width, height: int): FileOpResult =
   ## Uses the image provider to get a new image ready to display.
   ## `width` and `height` should be the size of the window.
+  if ip.mode == Mode.None:
+    return newFileOpResultError("No mode active")
+
   let op = ip.getFileName()
   if not op.success: return op
 
@@ -147,7 +145,7 @@ proc next*(ip: var ImageProvider, width, height: int): FileOpResult =
   var w, h: int
   if (width > height):
     h = height
-    w = ((rawPixbuf.width * h) / rawPixbuf.height).toInt 
+    w = ((rawPixbuf.width * h) / rawPixbuf.height).toInt
   else:
     w = width
     h = ((rawPixbuf.height * w) / rawPixbuf.width).toInt
