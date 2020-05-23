@@ -1,6 +1,6 @@
 import os, sets, random, httpClient, json, strformat, options
 import gintro/[gdkpixbuf, gobject]
-import commands
+import common
 
 const
   supportedExts = @[".png", ".jpg", ".jpeg"]
@@ -11,12 +11,6 @@ const
 type
   FileOpResult* = object of OpResult
     file*: string
-
-  Mode* {.pure.} = enum   ## Options for the display mode
-    None = "none"         ## No images will be displayed
-    Foxes = "foxes"       ## Some nice foxes
-    Inspiro = "inspiro"   ## Inspiring nonsense
-    File = "file"         ## Images from a local path
 
   ImageProvider* = ref object of RootObj
     ## Manages images that should be displayed

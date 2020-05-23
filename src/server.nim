@@ -1,11 +1,11 @@
 import net, json, strutils
-import commands
+import common
 
 type
   ServerArgs* = object of RootObj
     verbose: bool
 
-var 
+var
   chan*: Channel[CommandMessage]
   verbose: bool
 
@@ -31,7 +31,7 @@ proc runServer*[ServerArgs](arg: ServerArgs) {.thread, nimcall.} =
   server.listen()
   log "Control server is listening"
 
-  while true:    
+  while true:
     # Process client requests
     var client = net.newSocket()
     server.accept(client)
@@ -41,7 +41,7 @@ proc runServer*[ServerArgs](arg: ServerArgs) {.thread, nimcall.} =
       if line == "":
         log "No data from client"
         continue
-      
+
       var jsonData = parseJson(line)
       let msg = jsonData.to(CommandMessage)
       case msg.command

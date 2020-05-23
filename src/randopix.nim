@@ -2,7 +2,7 @@ import os, options, strformat
 import gintro/[glib, gobject, gtk, gio]
 import gintro/gdk except Window
 import argparse except run
-import providers, server, commands
+import providers, server, common
 
 const
   css = slurp("app.css")
@@ -23,10 +23,6 @@ var
   label: Label
   # Server vor recieving commands from external tools
   serverWorker: system.Thread[ServerArgs]
-
-proc enumToStrings(en: typedesc): seq[string] =
-  for x in en:
-    result.add $x
 
 proc log(things: varargs[string, `$`]) =
   if args.verbose:
@@ -52,6 +48,10 @@ proc newArgs(): Option[Args] =
 
   try:
     let opts = p.parse(commandLineParams())
+
+    # Catch the help option. Do nothing more
+    if opts.help:
+      return
 
     # Parse the starting mode
     var startMode: Mode
@@ -127,17 +127,27 @@ proc checkServerChannel(image: Image): bool =
 
   if tried.dataAvailable:
     let msg: CommandMessage = tried.msg
-    log "Main app got message: ", msg.command
+    log "Recieved command: ", msg.command
 
     case msg.command
     of cRefresh:
       forceUpdate(nil, nil, image)
+
     of cTimeout:
       let val = msg.parameter.parseInt * 1000
       log "Setting timeout to ", val
       args.timeout = val
       discard updateTimeout.remove
       updateTimeout = int(timeoutAdd(uint32(args.timeout), timedUpdate, image))
+
+    of cMode:
+      try:
+        let mode = parseEnum[Mode](msg.parameter)
+        log "Switching mode: ", mode
+        imageProvider.mode = mode
+      except ValueError:
+        log "Invalid mode: ", msg.parameter
+
     else:
       log "Command ignored: ", msg.command
 
