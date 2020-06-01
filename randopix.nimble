@@ -9,7 +9,10 @@ srcDir        = "src"
 bin           = @["randopix", "pixctrl"]
 
 # Dependencies
-requires "nim >= 1.0.0", "gintro <= 0.5.5", "argparse >=0.10.1"
+requires "nim >= 1.0.0", "gintro >= 0.5.5", "argparse >=0.10.1", "jester"
+
+task genJS, "Generate the Javascript client":
+  exec "nim js --out:src/resources/script.js src/pixscript.nim"
 
 task debug, "Compile debug version":
   exec "nim c -d:debug --debugger:native --out:randopix src/randopix.nim"

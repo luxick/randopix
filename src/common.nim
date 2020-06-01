@@ -1,8 +1,5 @@
 import json
 
-const
-  defaultPort* = 5555     ## Default port at which the control server will run
-
 type
   OpResult* = object of RootObj ## Result object for signalling failure state across proc calls
     success*: bool              ## Indicating if the opration was successfull
@@ -30,7 +27,7 @@ proc newOpResult*(): OpResult =
 proc newOpResult*(msg: string): OpResult =
   OpResult(success: false, errorMsg: msg)
 
-proc newCommand*(c: Command, p: string = ""): CommandMessage =
+proc newCommandMessage*(c: Command, p: string = ""): CommandMessage =
   CommandMessage(command: c, parameter: p)
 
 proc wrap*(msg: CommandMessage): string =

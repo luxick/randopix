@@ -1,52 +1,66 @@
-import strutils, net
+import strutils, httpClient
 import argparse
 import common
 
 const modeHelp = "Change the display mode. Possible values: [$1]" % Mode.enumToStrings().join(", ")
 
-var socket = newSocket()
+var
+  randopixServer*: string     ## URL for the randopix server
+  client = newHttpClient()
 
-proc sendCommand*(server, port: string, msg: CommandMessage) =
-  socket.connect(server, Port(port.parseInt))
-  if not socket.trySend(msg.wrap):
-    echo "Cannot send command: ", msg
-  socket.close()
+proc sendCommand(msg: CommandMessage) =
+  let resp = client.post(randopixServer, msg.wrap)
+  if not resp.status.contains("200"):
+    echo "Error while sending command: ", resp.status
 
-proc switchMode*(server, port: string, mode: string) =
+proc sendCommand(cmd: Command) =
+  sendCommand(newCommandMessage(cmd))
+
+proc switchMode*(mode: string) =
+  ## Update the display mode
   try:
     discard parseEnum[Mode](mode)
   except ValueError:
     echo "Invalid mode: ", mode
     echo "Possible values: [$1]" % Mode.enumToStrings().join(", ")
     return
-  let c = newCommand(cMode, mode)
-  sendCommand(server, port, c)
+  sendCommand(newCommandMessage(cMode, mode))
+
+proc refresh*() =
+  ## Force refresh of the current image
+  sendCommand(cRefresh)
+
+proc setTimeout*(seconds: string) =
+  ## Set the image timeout to this value
+  sendCommand(newCommandMessage(cTimeout, seconds))
 
 when isMainModule:
   var p = newParser("pixctrl"):
     help("Control utilitiy for randopix")
-    option("-s", "--server", help="Host running the randopix server", default="127.0.0.1")
-    option("-p", "--port", help="Port to connect to the randopix server", default = $defaultPort)
+    option("-s", "--server", help="Host running the randopix server", default="http://localhost/")
+    run:
+      randopixServer = opts.server
 
     command($cRefresh):
+      ## Force refresh command
       help("Force image refresh now")
       run:
-        let c = newCommand(cRefresh)
-        sendCommand(opts.parentOpts.server, opts.parentOpts.port, c)
+        refresh()
 
     command($cTimeout):
+      ## Timeout Command
       help("Set timeout in seconds before a new image is displayed")
       arg("seconds", default = "300")
       run:
-        let c = newCommand(cTimeout, opts.seconds)
-        sendCommand(opts.parentOpts.server, opts.parentOpts.port, c)
+        setTimeout(opts.seconds)
 
     command($cMode):
+      ## Mode switch command
       help(modeHelp)
       arg("mode")
       run:
-        switchMode(opts.parentOpts.server, opts.parentOpts.port, opts.mode)
+        switchMode(opts.mode)
   try:
     p.run(commandLineParams())
   except:
-    echo p.help
+    echo getCurrentExceptionMsg()

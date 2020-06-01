@@ -2,10 +2,10 @@ import os, options, strformat
 import gintro/[glib, gobject, gtk, gio]
 import gintro/gdk except Window
 import argparse except run
-import providers, server, common
+import providers, serverNew, common
 
 const
-  css = slurp("app.css")
+  css = slurp("resources/app.css")
   version = "0.1"
 
 type
@@ -13,6 +13,7 @@ type
     fullscreen: bool    ## Applicaion is show in fullscreen mode
     verbose: bool       ## More debug information in notification label
     timeout: int        ## Milliseconds between image refreshes
+    port: int           ## Port to host the control server
 
 var
   imageProvider: ImageProvider  ## Gets images from the chosen source
@@ -41,8 +42,9 @@ proc newArgs(): Option[Args] =
   let p = newParser("randopix"):
     help(fmt"Version {version} - Display random images from different sources")
     option("-m", "--mode", help="The image source mode.", choices=enumToStrings(Mode))
-    option("-p", "--path", help="Path to a directory with images for the 'file' mode")
+    option("-d", "--directoy", help="Path to a directory with images for the 'file' mode")
     option("-t", "--timeout", help="Seconds before the image is refreshed", default="300")
+    option("-p", "--port", help="Port over which the control server should be accessible", default="80")
     flag("-w", "--windowed", help="Do not start in fullscreen mode")
     flag("-v", "--verbose", help="Show more information")
 
@@ -61,8 +63,8 @@ proc newArgs(): Option[Args] =
       startMode = Mode.None
 
     # Create the image provider
-    if opts.path != "":
-      imageProvider = newImageProvider(opts.verbose, startMode, opts.path)
+    if opts.directoy != "":
+      imageProvider = newImageProvider(opts.verbose, startMode, opts.directoy)
     else:
       imageProvider = newImageProvider(opts.verbose, startMode)
 
@@ -76,7 +78,8 @@ proc newArgs(): Option[Args] =
     return some(Args(
       fullscreen: not opts.windowed,
       verbose: opts.verbose,
-      timeout: timeout))
+      timeout: timeout,
+      port: opts.port.parseInt))
   except:
     echo p.help
 
@@ -164,11 +167,8 @@ proc toggleFullscreen(action: SimpleAction; parameter: Variant; window: Applicat
 
 proc cleanUp(w: ApplicationWindow, app: Application) =
   ## Stop the control server and exit the GTK application
-  log "Stopping control server..."
-  closeServer()
-  serverWorker.joinThread()
   chan.close()
-  log "Server stopped."
+  log "Server channel closed."
   app.quit()
 
 proc quit(action: SimpleAction; parameter: Variant; app: Application) =
@@ -236,7 +236,7 @@ proc appActivate(app: Application) =
   chan.open()
 
   ## Start the server for handling incoming commands
-  let serverArgs = newServerArgs(args.verbose)
+  let serverArgs = ServerArgs(verbose: args.verbose, port: args.port)
   createThread(serverWorker, runServer, serverArgs)
   discard idleAdd(checkServerChannel, image)
 
