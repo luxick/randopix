@@ -2,7 +2,7 @@ import os, options, strformat
 import gintro/[glib, gobject, gtk, gio]
 import gintro/gdk except Window
 import argparse except run
-import providers, serverNew, common
+import providers, server, common
 
 const
   css = slurp("resources/app.css")
