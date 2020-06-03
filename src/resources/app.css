@@ -3,7 +3,7 @@ window {
   font-size: 30px;
 }
 label {
-  background-color: #fff;
+  background-color: rgba(255, 255, 255, .75);
   border: 2px solid gray;
   border-radius: 5px;
   margin: 10px;

@@ -7,6 +7,12 @@ import providers, server, common
 const
   css = slurp("resources/app.css")
   version = "0.1"
+  helpString = [
+    "ESC\tClose program",
+    "H\tShow/Hide this help",
+    "F\tToggle fullscreen",
+    "U\tForce refresh"
+  ].join("\n")
 
 type
   Args = ref object
@@ -165,6 +171,12 @@ proc toggleFullscreen(action: SimpleAction; parameter: Variant; window: Applicat
     window.fullscreen
   args.fullscreen = not args.fullscreen
 
+proc toggleHelp(action: SimpleAction; parameter: Variant; label: Label) =
+  if label.visible:
+    label.hide
+  else:
+    label.show
+
 proc cleanUp(w: ApplicationWindow, app: Application) =
   ## Stop the control server and exit the GTK application
   chan.close()
@@ -194,12 +206,17 @@ proc appActivate(app: Application) =
   addProviderForScreen(getDefaultScreen(), provider, STYLE_PROVIDER_PRIORITY_USER)
 
   # Create all windgets we are gonna use
-  label = newLabel("Starting...")
+  label = newLabel(fmt"Starting ('H' for help)...")
   label.halign = Align.`end`
   label.valign = Align.`end`
 
+  let helpText = newLabel(helpString)
+  helpText.halign = Align.start
+  helpText.valign = Align.start
+
   let container = newOverlay()
   container.addOverlay(label)
+  container.addOverlay(helpText)
   window.add(container)
 
   let image = newImage()
@@ -209,24 +226,33 @@ proc appActivate(app: Application) =
     window.fullscreen
 
   ## Connect the GTK signals to the procs
-  let fullscreenAction = newSimpleAction("fullscreen")
-  discard fullscreenAction.connect("activate", toggleFullscreen, window)
+  var action: SimpleAction
+
+  action = newSimpleAction("fullscreen")
+  discard action.connect("activate", toggleFullscreen, window)
   app.setAccelsForAction("win.fullscreen", "F")
-  window.actionMap.addAction(fullscreenAction)
+  window.actionMap.addAction(action)
 
-  let quitAction = newSimpleAction("quit")
-  discard quitAction.connect("activate", quit, app)
+  action = newSimpleAction("quit")
+  discard action.connect("activate", quit, app)
   app.setAccelsForAction("win.quit", "Escape")
-  window.actionMap.addAction(quitAction)
+  window.actionMap.addAction(action)
 
-  let updateImageAction = newSimpleAction("update")
-  discard updateImageAction.connect("activate", forceUpdate, image)
+  action = newSimpleAction("update")
+  discard action.connect("activate", forceUpdate, image)
   app.setAccelsForAction("win.update", "U")
-  window.actionMap.addAction(updateImageAction)
+  window.actionMap.addAction(action)
+
+  action = newSimpleAction("help")
+  discard action.connect("activate", toggleHelp, helpText)
+  app.setAccelsForAction("win.help", "H")
+  window.actionMap.addAction(action)
 
   window.connect("destroy", cleanUp, app)
 
   window.showAll
+  # Help is only shown on demand
+  helpText.hide
 
   # Setting the inital image
   # Fix 1 second timeout to make sure all other initialization has finished
