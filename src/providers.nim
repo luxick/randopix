@@ -1,4 +1,4 @@
-import os, sets, random, httpClient, json, strformat, options
+import os, sets, random, httpClient, json, strformat, options, deques
 import gintro/[gdkpixbuf, gobject]
 import common
 
@@ -6,7 +6,6 @@ const
   supportedExts = @[".png", ".jpg", ".jpeg"]
   foxesUrl = "https://randomfox.ca/floof/"
   inspiroUrl = "http://inspirobot.me/api?generate=true"
-  tmpFile = "/tmp/randopix_tmp.png"
 
 type
   FileOpResult* = object of OpResult
@@ -18,17 +17,18 @@ type
     mode* : Mode          ## Selects the API that is used to get images
     path*: Option[string] ## Path on the local file syetem that will be used in `file` mode
     exts: HashSet[string] ## Allowed extensions that the `file` mode will display
-    files: seq[string]    ## Currently loaded list of images in `file` mode
 
 var
   client = newHttpClient()  ## For loading images from the web
+  tmpDir = getTempDir() / "randopix"
+  tmpFile =  tmpDir / "tmp.png"
+  fileList = initDeque[string]()
 
 ########################
 # Constructors
 ########################
 
 proc newImageProvider(verbose: bool, mode: Mode, path: Option[string]): ImageProvider =
-  randomize()
   ImageProvider(verbose: verbose, mode: mode, path: path, exts: supportedExts.toHashSet)
 
 proc newImageProvider*(verbose: bool): ImageProvider =
@@ -94,20 +94,24 @@ proc getLocalFile(ip: var ImageProvider): FileOpResult =
 
   # First, check if there are still images left to be loaded.
   # If not reread all files from the path
-  if ip.files.len < 1:
-    if ip.path.isNone:
-      return newFileOpResultError("No path for image loading")
-    ip.log "Reloading file list..."
+  if fileList.len == 0:
+    var tmp: seq[string]
+    var split: tuple[dir, name, ext: string]
     for file in walkDirRec(ip.path.get):
-      let split = splitFile(file)
+      split = splitFile(file)
       if ip.exts.contains(split.ext):
-        ip.files.add(file)
-    ip.log fmt"Loaded {ip.files.len} files"
-    shuffle(ip.files)
+        tmp.add($file)
 
+    ip.log fmt"Loaded {tmp.len} files"
+    shuffle(tmp)
+    for file in tmp:
+      fileList.addLast(file)
+  if fileList.len == 0:
+    return newFileOpResultError("No files found")
+
+  let next = fileList.popFirst()
   # Remove the current file after
-  result = newFileOpResult(ip.files[0])
-  ip.files.delete(0)
+  result = newFileOpResult(next)
 
 proc getFileName(ip: var ImageProvider): FileOpResult =
   ## Get the temporary file name of the next file to display
@@ -151,7 +155,10 @@ proc next*(ip: var ImageProvider, width, height: int): FileOpResult =
     return newFileOpResultError("Error while saving temporary image")
 
   # GTK pixbuf leaks memory when not manually decreasing reference count
-  pixbuf.genericGObjectUnref()
-  rawPixbuf.genericGObjectUnref()
+  pixbuf.unref()
+  rawPixbuf.unref()
 
   newFileOpResult(tmpFile)
+
+createDir(tmpDir)
+randomize()

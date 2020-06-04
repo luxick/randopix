@@ -28,6 +28,7 @@ var
   # Widgets
   window: ApplicationWindow
   label: Label
+  box: Box
   # Server vor recieving commands from external tools
   serverWorker: system.Thread[ServerArgs]
 
@@ -35,14 +36,14 @@ proc log(things: varargs[string, `$`]) =
   if args.verbose:
     echo things.join()
 
-proc notify(label: Label, message: string = "") =
+proc notify(label: Label, things: varargs[string, `$`]) =
   ## Shows the notification box in the lower left corner.
   ## If no message is passed, the box will be hidden
-  label.text = message
-  if (message == ""):
-    label.hide
+  label.text = things.join()
+  if (label.text == ""):
+    box.hide
   else:
-    label.show
+    box.show
 
 proc newArgs(): Option[Args] =
   let p = newParser("randopix"):
@@ -50,7 +51,7 @@ proc newArgs(): Option[Args] =
     option("-m", "--mode", help="The image source mode.", choices=enumToStrings(Mode))
     option("-d", "--directoy", help="Path to a directory with images for the 'file' mode")
     option("-t", "--timeout", help="Seconds before the image is refreshed", default="300")
-    option("-p", "--port", help="Port over which the control server should be accessible", default="80")
+    option("-p", "--port", help="Port over which the control server should be accessible", default="8080")
     flag("-w", "--windowed", help="Do not start in fullscreen mode")
     flag("-v", "--verbose", help="Show more information")
 
@@ -115,7 +116,7 @@ proc updateImage(image: Image): bool =
       e = getCurrentException()
       msg = getCurrentExceptionMsg()
     log "Got exception ", repr(e), " with message ", msg
-    label.notify "Error while refreshing image, retrying..."
+    label.notify "Error while refreshing, retrying..."
     return false
 
 proc timedUpdate(image: Image): bool =
@@ -124,8 +125,8 @@ proc timedUpdate(image: Image): bool =
   return false
 
 proc forceUpdate(action: SimpleAction; parameter: Variant; image: Image): void =
-  log "Refreshing image..."
-  label.notify "Refreshing image..."
+  log "Refreshing..."
+  label.notify "Refreshing..."
   if updateTimeout > 0:
     discard updateTimeout.remove
   updateTimeout = int(timeoutAdd(500, timedUpdate, image))
@@ -152,8 +153,10 @@ proc checkServerChannel(image: Image): bool =
     of cMode:
       try:
         let mode = parseEnum[Mode](msg.parameter)
-        log "Switching mode: ", mode
         imageProvider.mode = mode
+        forceUpdate(nil, nil, image)
+        log "Switching mode: ", mode
+        label.notify fmt"Switch Mode: {msg.parameter.capitalizeAscii()}"
       except ValueError:
         log "Invalid mode: ", msg.parameter
 
@@ -171,11 +174,11 @@ proc toggleFullscreen(action: SimpleAction; parameter: Variant; window: Applicat
     window.fullscreen
   args.fullscreen = not args.fullscreen
 
-proc toggleHelp(action: SimpleAction; parameter: Variant; label: Label) =
-  if label.visible:
-    label.hide
+proc toggleHelp(action: SimpleAction; parameter: Variant; box: Box) =
+  if box.visible:
+    box.hide
   else:
-    label.show
+    box.show
 
 proc cleanUp(w: ApplicationWindow, app: Application) =
   ## Stop the control server and exit the GTK application
@@ -207,16 +210,25 @@ proc appActivate(app: Application) =
 
   # Create all windgets we are gonna use
   label = newLabel(fmt"Starting ('H' for help)...")
-  label.halign = Align.`end`
-  label.valign = Align.`end`
+
+  let spinner = newSpinner()
+  spinner.start()
+
+  box = newBox(Orientation.horizontal, 2)
+  box.halign = Align.`end`
+  box.valign = Align.`end`
+  box.packStart(spinner, true, true, 10)
+  box.packStart(label, true, true, 0)
 
   let helpText = newLabel(helpString)
-  helpText.halign = Align.start
-  helpText.valign = Align.start
+  let helpBox = newBox(Orientation.vertical, 0)
+  helpBox.packStart(helpText, true, true, 0)
+  helpBox.halign = Align.start
+  helpBox.valign = Align.start
 
   let container = newOverlay()
-  container.addOverlay(label)
-  container.addOverlay(helpText)
+  container.addOverlay(box)
+  container.addOverlay(helpBox)
   window.add(container)
 
   let image = newImage()
@@ -244,7 +256,7 @@ proc appActivate(app: Application) =
   window.actionMap.addAction(action)
 
   action = newSimpleAction("help")
-  discard action.connect("activate", toggleHelp, helpText)
+  discard action.connect("activate", toggleHelp, helpBox)
   app.setAccelsForAction("win.help", "H")
   window.actionMap.addAction(action)
 
@@ -252,7 +264,7 @@ proc appActivate(app: Application) =
 
   window.showAll
   # Help is only shown on demand
-  helpText.hide
+  helpBox.hide
 
   # Setting the inital image
   # Fix 1 second timeout to make sure all other initialization has finished

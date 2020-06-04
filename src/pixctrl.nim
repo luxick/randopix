@@ -37,7 +37,7 @@ proc setTimeout*(seconds: string) =
 when isMainModule:
   var p = newParser("pixctrl"):
     help("Control utilitiy for randopix")
-    option("-s", "--server", help="Host running the randopix server", default="http://localhost/")
+    option("-s", "--server", help="Host running the randopix server", default="http://localhost:8080/")
     run:
       randopixServer = opts.server
 
