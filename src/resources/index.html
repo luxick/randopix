@@ -9,10 +9,27 @@
 
     <link rel="stylesheet" type="text/css" href="/style">
 
+    <script src="/pixctrl" type="text/javascript"></script>
     <script src="/script" type="text/javascript"></script>
   </head>
 
   <body>
       <h1>randopix web control</h1>
+
+      <p>
+        <button type="button" class="btn" onclick="refresh()">Refresh Image Now!</button>
+      </p>
+
+      <div>Switch the image mode</div>
+      <p>
+        <select id="modeselect"></select>
+        <button type="button" class="btn" onclick="js_setMode()">Set Mode</button>
+      </p>
+
+      <div>Adjust timespan between images</div>
+      <p>
+        <input id="timeout" type="number">
+        <button type="button" class="btn" onclick="js_setTimeout()">Set Timeout</button>
+      </p>
   </body>
 </html>

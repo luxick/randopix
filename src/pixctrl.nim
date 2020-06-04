@@ -1,17 +1,32 @@
-import strutils, httpClient
-import argparse
+import strutils
 import common
 
-const modeHelp = "Change the display mode. Possible values: [$1]" % Mode.enumToStrings().join(", ")
-
-var
-  randopixServer*: string     ## URL for the randopix server
-  client = newHttpClient()
+when defined(js):
+  import ajax, jsconsole, dom, json
+else:
+  import httpClient
+  import argparse
+  var randopixServer* {.exportc.}: string     ## URL for the randopix server
 
 proc sendCommand(msg: CommandMessage) =
-  let resp = client.post(randopixServer, msg.wrap)
-  if not resp.status.contains("200"):
-    echo "Error while sending command: ", resp.status
+  when defined(js):
+    console.log("Sending:", $msg, "to URL:", document.URL)
+    var req = newXMLHttpRequest()
+
+    proc processSend(e:Event) =
+      if req.readyState == rsDONE:
+        if req.status != 200:
+          console.log("There was a problem with the request.")
+          console.log($req.status, req.statusText)
+
+    req.onreadystatechange = processSend
+    req.open("POST", document.URL)
+    req.send(cstring($(%*msg)))
+  else:
+    let client = newHttpClient()
+    let resp = client.post(randopixServer, $msg)
+    if not resp.status.contains("200"):
+      echo "Error while sending command: ", resp.status
 
 proc sendCommand(cmd: Command) =
   sendCommand(newCommandMessage(cmd))
@@ -26,7 +41,7 @@ proc switchMode*(mode: string) =
     return
   sendCommand(newCommandMessage(cMode, mode))
 
-proc refresh*() =
+proc refresh*() {.exportc.} =
   ## Force refresh of the current image
   sendCommand(cRefresh)
 
@@ -34,33 +49,43 @@ proc setTimeout*(seconds: string) =
   ## Set the image timeout to this value
   sendCommand(newCommandMessage(cTimeout, seconds))
 
-when isMainModule:
-  var p = newParser("pixctrl"):
-    help("Control utilitiy for randopix")
-    option("-s", "--server", help="Host running the randopix server", default="http://localhost:8080/")
-    run:
-      randopixServer = opts.server
-
-    command($cRefresh):
-      ## Force refresh command
-      help("Force image refresh now")
+when defined(js):
+  proc getModes(): seq[cstring] {.exportc.} =
+    for mode in enumToStrings(Mode):
+      result.add cstring(mode)
+  proc switchMode*(mode: cstring) {.exportc.} =
+    switchMode($mode)
+  proc setTimeout*(seconds: cstring) {.exportc.} =
+    setTimeout($seconds)
+else:
+  when isMainModule:
+    const modeHelp = "Change the display mode. Possible values: [$1]" % Mode.enumToStrings().join(", ")
+    var p = newParser("pixctrl"):
+      help("Control utilitiy for randopix")
+      option("-s", "--server", help="Host running the randopix server", default="http://localhost:8080/")
       run:
-        refresh()
+        randopixServer = opts.server
 
-    command($cTimeout):
-      ## Timeout Command
-      help("Set timeout in seconds before a new image is displayed")
-      arg("seconds", default = "300")
-      run:
-        setTimeout(opts.seconds)
+      command($cRefresh):
+        ## Force refresh command
+        help("Force image refresh now")
+        run:
+          refresh()
 
-    command($cMode):
-      ## Mode switch command
-      help(modeHelp)
-      arg("mode")
-      run:
-        switchMode(opts.mode)
-  try:
-    p.run(commandLineParams())
-  except:
-    echo getCurrentExceptionMsg()
+      command($cTimeout):
+        ## Timeout Command
+        help("Set timeout in seconds before a new image is displayed")
+        arg("seconds", default = "300")
+        run:
+          setTimeout(opts.seconds)
+
+      command($cMode):
+        ## Mode switch command
+        help(modeHelp)
+        arg("mode")
+        run:
+          switchMode(opts.mode)
+    try:
+      p.run(commandLineParams())
+    except:
+      echo getCurrentExceptionMsg()

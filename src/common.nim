@@ -21,6 +21,9 @@ type
     command*: Command     ## Command that the application should execute
     parameter*: string    ## Optional parameter for the command
 
+proc `$`(cMsg: CommandMessage): string =
+  $(%cMsg)
+
 proc newOpResult*(): OpResult =
   OpResult(success: true)
 
@@ -29,9 +32,6 @@ proc newOpResult*(msg: string): OpResult =
 
 proc newCommandMessage*(c: Command, p: string = ""): CommandMessage =
   CommandMessage(command: c, parameter: p)
-
-proc wrap*(msg: CommandMessage): string =
-  $(%msg) & "\r\L"
 
 proc enumToStrings*(en: typedesc): seq[string] =
   for x in en:

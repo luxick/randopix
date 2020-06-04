@@ -10,13 +10,21 @@ binDir        = "bin"
 bin           = @["randopix", "pixctrl"]
 
 # Dependencies
-requires "nim >= 1.0.0", "gintro", "argparse", "jester"
+requires "nim >= 1.0.0", "gintro", "argparse", "jester", "ajax"
+
+proc genJS =
+  echo "Generating JS Client"
+  exec("nim js -o:src/resources/pixctrl.js src/pixctrl.nim")
 
 task genJS, "Generate the Javascript client":
-  exec "nim js -o:src/resources/script.js src/pixscript.nim"
+  genJS()
+
+task buildAll, "Generate JS and run build":
+  genJS()
+  exec "nimble build"
 
 task debug, "Compile debug version":
   exec "nim c -d:debug --debugger:native -o:bin/randopix src/randopix.nim"
 
-task release, "Compile release version":
-  exec fmt"nim c -d:release -o:bin/randopix-{version} src/randopix.nim"
+before install:
+  genJS()

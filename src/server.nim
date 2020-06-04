@@ -1,10 +1,11 @@
-import asyncdispatch, strutils, json
+import asyncdispatch, strutils, json, logging
 import jester
 import common
 
 const
   index = slurp("resources/index.html")
   style = slurp("resources/site.css")
+  pixctrlJs = slurp("resources/pixctrl.js")
   script = slurp("resources/script.js")
 
 type
@@ -22,24 +23,35 @@ proc log(things: varargs[string, `$`]) =
 
 router randopixRouter:
   get "/":
-    log "Access from ", request.ip
     resp index
 
   get "/style":
     resp(style, contentType="text/css")
 
+  get "/pixctrl":
+    resp(pixctrlJs, contentType="text/javascript")
+
   get "/script":
     resp(script, contentType="text/javascript")
 
   post "/":
-    let json = request.body.parseJson
-    let msg = json.to(CommandMessage)
-    # Pass command from client to main applicaiton
-    chan.send(msg)
-    resp Http200
+    try:
+      log "Command from ", request.ip
+      let json = request.body.parseJson
+      let msg = json.to(CommandMessage)
+      log "Got message: ", $msg
+      # Pass command from client to main applicaiton
+      chan.send(msg)
+      resp Http200
+    except:
+      log "Error: ", getCurrentExceptionMsg()
 
 proc runServer*[ServerArgs](arg: ServerArgs) {.thread, nimcall.} =
   verbose = arg.verbose
+  if verbose:
+    logging.setLogFilter(lvlInfo)
+  else:
+    logging.setLogFilter(lvlNotice)
   let port = Port(arg.port)
   let settings = newSettings(port=port)
   var server = initJester(randopixRouter, settings=settings)
