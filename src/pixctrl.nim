@@ -1,8 +1,8 @@
-import strutils
+import strutils, json
 import common
 
 when defined(js):
-  import ajax, jsconsole, dom, json
+  import ajax, jsconsole, dom
 else:
   import httpClient
   import argparse
@@ -24,7 +24,7 @@ proc sendCommand(msg: CommandMessage) =
     req.send(cstring($(%*msg)))
   else:
     let client = newHttpClient()
-    let resp = client.post(randopixServer, $msg)
+    let resp = client.post(randopixServer, $(%msg))
     if not resp.status.contains("200"):
       echo "Error while sending command: ", resp.status
 
