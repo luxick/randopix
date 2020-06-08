@@ -7,29 +7,39 @@
 
     <title>randopix</title>
 
-    <link rel="stylesheet" type="text/css" href="/style">
+    <link rel="stylesheet" type="text/css" href="/site.css">
 
-    <script src="/pixctrl" type="text/javascript"></script>
-    <script src="/script" type="text/javascript"></script>
+    <script src="/pixctrl.js" type="text/javascript"></script>
+    <script src="/script.js" type="text/javascript"></script>
   </head>
 
-  <body>
-      <h1>randopix web control</h1>
+  <body class="star-bg">
+    <main>
+      <h1 class="center">Randopix Remote</h1>
 
-      <p>
-        <button type="button" class="btn" onclick="refresh()">Refresh Image Now!</button>
-      </p>
+      <div class="control">
+        <div class="control-info">Load the next image</div>
+        <div class="control-body">
+          <button type="button" class="btn" onclick="refresh()">Refresh Image Now!</button>
+        </div>
+      </div>
 
-      <div>Switch the image mode</div>
-      <p>
-        <select id="modeselect"></select>
-        <button type="button" class="btn" onclick="js_setMode()">Set Mode</button>
-      </p>
+      <div class="control">
+        <div class="control-info">Switch the image mode</div>
+        <div class="control-body">
+          <select id="modeselect"></select>
+          <button type="button" class="btn" onclick="js_setMode()">Set Mode</button>
+        </div>
+      </div>
 
-      <div>Adjust timespan between images</div>
-      <p>
-        <input id="timeout" type="number">
-        <button type="button" class="btn" onclick="js_setTimeout()">Set Timeout</button>
-      </p>
+      <div class="control">
+        <div class="control-info">Adjust timespan between images</div>
+        <div class="control-body">
+          <input id="timeout" type="number">
+          <button type="button" class="btn" onclick="js_setTimeout()">Set Timeout</button>
+        </div>
+      </div>
+
+    </main>
   </body>
 </html>

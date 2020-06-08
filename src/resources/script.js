@@ -21,6 +21,7 @@ function js_setTimeout() {
         return;
     }
     setTimeout(timeout.toString());
+    elem.value = null;
 }
 
 function js_setMode() {

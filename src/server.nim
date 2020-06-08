@@ -25,13 +25,13 @@ router randopixRouter:
   get "/":
     resp index
 
-  get "/style":
+  get "/site.css":
     resp(style, contentType="text/css")
 
-  get "/pixctrl":
+  get "/pixctrl.js":
     resp(pixctrlJs, contentType="text/javascript")
 
-  get "/script":
+  get "/script.js":
     resp(script, contentType="text/javascript")
 
   post "/":
