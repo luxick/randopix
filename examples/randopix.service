@@ -1,0 +1,9 @@
+[Unit]
+Description=randopix image display
+
+[Service]
+Environment=DISPLAY=:0
+ExecStart=randopix -d /mnt/pix -m file
+
+[Install]
+WantedBy=multi-user.target
