@@ -149,7 +149,8 @@ proc checkServerChannel(image: Image): bool =
       let val = msg.parameter.parseInt * 1000
       log "Setting timeout to ", val
       args.timeout = val
-      discard updateTimeout.remove
+      if updateTimeout > 0:
+        discard updateTimeout.remove
       updateTimeout = int(timeoutAdd(uint32(args.timeout), timedUpdate, image))
 
     of cMode:
