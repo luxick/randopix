@@ -6,4 +6,4 @@ Environment=DISPLAY=:0
 ExecStart=randopix -d /mnt/pix -m file
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=default.target
