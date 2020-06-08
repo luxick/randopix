@@ -120,7 +120,9 @@ proc updateImage(image: Image): bool =
     return false
 
 proc timedUpdate(image: Image): bool =
-  discard updateImage(image);
+  discard updateImage(image)
+  # Force garbage collection now. Otherwise the RAM will fill up until the GC is triggered.
+  GC_fullCollect()
   updateTimeout = int(timeoutAdd(uint32(args.timeout), timedUpdate, image))
   return false
 
