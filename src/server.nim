@@ -48,10 +48,7 @@ router randopixRouter:
 
 proc runServer*[ServerArgs](arg: ServerArgs) {.thread, nimcall.} =
   verbose = arg.verbose
-  if verbose:
-    logging.setLogFilter(lvlInfo)
-  else:
-    logging.setLogFilter(lvlNotice)
+  logging.setLogFilter(lvlInfo)
   let port = Port(arg.port)
   let settings = newSettings(port=port)
   var server = initJester(randopixRouter, settings=settings)

@@ -1,4 +1,4 @@
-import os, sets, random, httpClient, json, strformat, options, deques
+import os, sets, random, httpClient, json, strutils, strformat, options, deques, times
 import gintro/[gdkpixbuf, gobject]
 import common
 
@@ -53,8 +53,9 @@ proc newFileOpResult(file: string): FileOpResult =
 # Utilities
 ########################
 
-proc log(ip: ImageProvider, msg: string) =
-  if ip.verbose: echo msg
+proc log(ip: ImageProvider, things: varargs[string, `$`]) =
+  if ip.verbose:
+    echo things.join()
 
 ########################
 # Image Provider procs
@@ -147,7 +148,10 @@ proc next*(ip: var ImageProvider, width, height: int): FileOpResult =
   else:
     w = width
     h = ((rawPixbuf.height * w) / rawPixbuf.width).toInt
-  var pixbuf = rawPixbuf.scaleSimple(w, h, InterpType.bilinear)
+  let then = now()
+  var pixbuf = rawPixbuf.scaleSimple(w, h, InterpType.nearest)
+  let now = now()
+  ip.log "Image scaled. Time: ", (now - then).inMilliseconds, "ms"
   # The pixbuf is written to disk and loaded again once because
   # directly setting the image from a pixbuf will leak memory
   let saved = pixbuf.savev(tmpFile, "png", @[])

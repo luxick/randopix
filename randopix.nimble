@@ -1,7 +1,6 @@
-import strformat
 # Package
 
-version       = slurp("src/version")
+version       = "0.2.0"
 author        = "luxick"
 description   = "Play an image slide show from different sources"
 license       = "GPL-2.0"
