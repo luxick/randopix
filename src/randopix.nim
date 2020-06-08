@@ -193,6 +193,12 @@ proc quit(action: SimpleAction; parameter: Variant; app: Application) =
   ## Application quit event
   cleanUp(window, app)
 
+proc hidePointer(window: ApplicationWindow): void =
+  ## Hides the mouse pointer for the application.
+  let cur = window.getDisplay().newCursorForDisplay(CursorType.blankCursor)
+  let win = window.getWindow()
+  win.setCursor(cur)
+
 proc appActivate(app: Application) =
   # Parse arguments from the command line
   let parsed = newArgs()
@@ -264,6 +270,7 @@ proc appActivate(app: Application) =
   window.actionMap.addAction(action)
 
   window.connect("destroy", cleanUp, app)
+  window.connect("realize", hidePointer)
 
   window.showAll
   # Help is only shown on demand
