@@ -4,7 +4,7 @@ import common
 when defined(js):
   import ajax, jsconsole, dom
 else:
-  import httpClient
+  import httpClient, strformat
   import argparse
   var randopixServer* {.exportc.}: string     ## URL for the randopix server
 
@@ -64,7 +64,10 @@ else:
       help("Control utilitiy for randopix")
       option("-s", "--server", help="Host running the randopix server", default="http://localhost:8080/")
       run:
-        randopixServer = opts.server
+        if opts.server.startsWith("http://"):
+          randopixServer = opts.server
+        else:
+          randopixServer = fmt"http://{opts.server}"
 
       command($cRefresh):
         ## Force refresh command
