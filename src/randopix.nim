@@ -6,7 +6,7 @@ import providers, server, common
 
 const
   css = slurp("resources/app.css")
-  version = "0.1"
+  version = slurp("version")
   helpString = [
     "ESC\tClose program",
     "H\tShow/Hide this help",

@@ -1,7 +1,7 @@
 import strformat
 # Package
 
-version       = "0.1.0"
+version       = slurp("src/version")
 author        = "luxick"
 description   = "Play an image slide show from different sources"
 license       = "GPL-2.0"
