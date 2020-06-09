@@ -1,12 +1,22 @@
-import asyncdispatch, strutils, json, logging
+import asyncdispatch, strutils, json, logging, os
 import jester
 import common
 
+when defined(release):
+  proc slurpResources(): Table[string, string] {.compileTime.} =
+    ## Include everything from the www dir into the binary.
+    ## This way the final executable will not need an static web folder.
+    for item in walkDir("src/resources/www/", true):
+      if item.kind == pcFile:
+        result[item.path] = slurp("resources/www/" & item.path)
+
+  const resources = slurpResources()
+
 const
-  index = slurp("resources/index.html")
-  style = slurp("resources/site.css")
-  pixctrlJs = slurp("resources/pixctrl.js")
-  script = slurp("resources/script.js")
+  contentTypes = {
+    ".js": "text/javascript",
+    ".css": "text/css"
+  }.toTable
 
 type
   ServerArgs* = object of RootObj
@@ -21,19 +31,37 @@ proc log(things: varargs[string, `$`]) =
   if verbose:
     echo things.join()
 
-router randopixRouter:
-  get "/":
-    resp index
+when defined(release):
+  ## When in release mode, use resources includes in the binary.
+  ## When developing use the files directly.
+  router getRouter:
+    get "/":
+      resp resources["index.html"]
 
-  get "/site.css":
-    resp(style, contentType="text/css")
+    get "/@resource":
+      try:
+        var cType: string
+        if contentTypes.hasKey(@"resource".splitFile.ext):
+          cType = contentTypes[@"resource".splitFile.ext]
+        resp resources[@"resource"], contentType=cType
+      except KeyError:
+        log "Resource not found: ", @"resource"
+        resp Http404
+else:
+  router getRouter:
+    get "/":
+      resp readFile("src/resources/www/index.html")
+    get "/@resource":
+      try:
+        var cType: string
+        if contentTypes.hasKey(@"resource".splitFile.ext):
+          cType = contentTypes[@"resource".splitFile.ext]
+        resp readFile("src/resources/www/" & @"resource"), contentType=cType
+      except KeyError:
+        log "Resource not found: ", @"resource"
+        resp Http404
 
-  get "/pixctrl.js":
-    resp(pixctrlJs, contentType="text/javascript")
-
-  get "/script.js":
-    resp(script, contentType="text/javascript")
-
+router postRouter:
   post "/":
     try:
       log "Command from ", request.ip
@@ -45,6 +73,10 @@ router randopixRouter:
       resp Http200
     except:
       log "Error: ", getCurrentExceptionMsg()
+
+router randopixRouter:
+  extend postRouter, ""
+  extend getRouter, ""
 
 proc runServer*[ServerArgs](arg: ServerArgs) {.thread, nimcall.} =
   verbose = arg.verbose

@@ -1,4 +1,4 @@
 ### Above combination will ignore all files without extension ###
-src/resources/pixctrl.js
 bin/
 .vscode/
+pixctrl.js

@@ -13,7 +13,7 @@ requires "nim >= 1.0.0", "gintro", "argparse", "jester", "ajax"
 
 proc genJS =
   echo "Generating JS Client"
-  exec("nim js -o:src/resources/pixctrl.js src/pixctrl.nim")
+  exec("nim js -o:src/resources/www/pixctrl.js src/pixctrl.nim")
 
 task genJS, "Generate the Javascript client":
   genJS()

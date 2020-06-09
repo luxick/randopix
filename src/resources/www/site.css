@@ -1,0 +1,157 @@
+@charset "utf-8";
+/* CSS Document */
+
+@font-face {
+    font-family: notcomicsans;
+    src: url("/not-comic-sans.woff") format('truetype');
+    font-weight: normal;
+    font-style: normal;
+}
+
+.star-bg {
+  background-color: #1c1d1b;
+  background-image: url("/stars.gif")
+}
+
+/* Chrome, Safari, Opera */
+@-webkit-keyframes rainbow {
+  0%{color: orange;}
+  10%{color: purple;}
+  20%{color: red;}
+  30%{color: CadetBlue;}
+  40%{color: yellow;}
+  50%{color: coral;}
+  60%{color: green;}
+  70%{color: cyan;}
+  80%{color: DeepPink;}
+  90%{color: DodgerBlue;}
+  100%{color: orange;}
+}
+
+/* Internet Explorer */
+@-ms-keyframes rainbow {
+  0%{color: orange;}
+  10%{color: purple;}
+  20%{color: red;}
+  30%{color: CadetBlue;}
+  40%{color: yellow;}
+  50%{color: coral;}
+  60%{color: green;}
+  70%{color: cyan;}
+  80%{color: DeepPink;}
+  90%{color: DodgerBlue;}
+  100%{color: orange;}
+}
+
+/* Standard Syntax */
+@keyframes rainbow {
+  0%{color: orange;}
+  10%{color: purple;}
+  20%{color: red;}
+  30%{color: CadetBlue;}
+  40%{color: yellow;}
+  50%{color: coral;}
+  60%{color: green;}
+  70%{color: cyan;}
+  80%{color: DeepPink;}
+  90%{color: DodgerBlue;}
+  100%{color: orange;}
+}
+
+body {
+  font-family: notcomicsans;
+  color:#FFFF00;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  font-size: 1.2rem;
+}
+
+main {
+  max-width: 900px;
+  align-self: center;
+  border: 1px solid gray;
+  border-radius: 5px;
+  background-image: url("/microfab.gif");
+  padding: 15px;
+}
+
+.control {
+  padding-bottom: 20px;
+}
+
+.control-info {
+  padding-bottom: 5px;
+}
+
+.control-body {
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+}
+.control-body > * {
+  margin-left: 5px;
+  margin-right: 5px;
+}
+
+h1 {
+  /* Chrome, Safari, Opera */
+  -webkit-animation: rainbow 5s infinite;
+  /* Internet Explorer */
+  -ms-animation: rainbow 5s infinite;
+  /* Standar Syntax */
+  animation: rainbow 5s infinite;
+  margin-top: 0;
+}
+
+button {
+  padding: 0;
+  border: none;
+  font: inherit;
+  color: inherit;
+  background-color: transparent;
+  /* show a hand cursor on hover; some argue that we
+  should keep the default arrow cursor for buttons */
+  cursor: pointer;
+}
+
+a:visited {
+  color: #ff0;
+}
+
+.btn {
+  text-align: center;
+  font-size: 1.3rem;
+  text-decoration: none;
+  display: block;
+  border: 2px solid darkgray;
+  border-radius: 5px;
+  padding: 0px 10px;
+  background-color: #1c1d1b;
+}
+.btn:hover {
+  color: #ff0;
+  fill: #ff0;
+  background-color: #0b0c0b;
+}
+
+.btn-mini {
+  font-size: 0.75rem;
+  border: 1px solid darkgray;
+  padding: 3px;
+  display: flex;
+  align-items: center;
+}
+.btn-mini > img {
+  width: 0.75rem;
+  height: 0.75rem;
+  margin-right: 5px;
+}
+
+.social {
+  margin-top: 20px;
+  display: inline-block;
+}
+.center {
+  text-align: center;
+}
