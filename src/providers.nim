@@ -1,4 +1,5 @@
 import os, sets, random, httpClient, json, strutils, strformat, options, deques, times
+from lenientops import `*`
 import gintro/[gdkpixbuf, gobject]
 import common
 
@@ -56,6 +57,19 @@ proc newFileOpResult(file: string): FileOpResult =
 proc log(ip: ImageProvider, things: varargs[string, `$`]) =
   if ip.verbose:
     echo things.join()
+
+func calcImageSize(maxWidth, maxHeight, imgWidth, imgHeight: int): tuple[width: int, height: int] =
+  ## Calculate the best fit for an image on the give screen size.
+  ## This should keep the image aspect ratio
+  let
+    ratioMax = maxWidth / maxHeight
+    ratioImg = imgWidth / imgHeight
+  if (ratioMax > ratioImg):
+    result.width = (imgWidth * (maxHeight / imgHeight)).toInt
+    result.height = maxHeight
+  else:
+    result.width = maxWidth
+    result.height = (imgHeight * (maxWidth / imgWidth)).toInt
 
 ########################
 # Image Provider procs
@@ -130,7 +144,7 @@ proc getFileName(ip: var ImageProvider): FileOpResult =
 # Exported procs
 ########################
 
-proc next*(ip: var ImageProvider, width, height: int): FileOpResult =
+proc next*(ip: var ImageProvider, maxWidth, maxHeight: int): FileOpResult =
   ## Uses the image provider to get a new image ready to display.
   ## `width` and `height` should be the size of the window.
   if ip.mode == Mode.None:
@@ -140,16 +154,11 @@ proc next*(ip: var ImageProvider, width, height: int): FileOpResult =
   if not op.success: return op
 
   var rawPixbuf = newPixbufFromFile(op.file)
-  # resize the pixbuf to best fit on screen
-  var w, h: int
-  if (width > height):
-    h = height
-    w = ((rawPixbuf.width * h) / rawPixbuf.height).toInt
-  else:
-    w = width
-    h = ((rawPixbuf.height * w) / rawPixbuf.width).toInt
+  # Resize the pixbuf to best fit on screen
+  let size = calcImageSize(maxWidth, maxHeight, rawPixbuf.width, rawPixbuf.height)
+  ip.log "Scale image to: ", size
   let then = now()
-  var pixbuf = rawPixbuf.scaleSimple(w, h, InterpType.nearest)
+  var pixbuf = rawPixbuf.scaleSimple(size.width, size.height, InterpType.nearest)
   let now = now()
   ip.log "Image scaled. Time: ", (now - then).inMilliseconds, "ms"
   # The pixbuf is written to disk and loaded again once because
