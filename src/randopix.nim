@@ -193,8 +193,10 @@ proc quit(action: SimpleAction; parameter: Variant; app: Application) =
   ## Application quit event
   cleanUp(window, app)
 
-proc hidePointer(window: ApplicationWindow): void =
+proc realizeWindow(window: ApplicationWindow): void =
   ## Hides the mouse pointer for the application.
+  if args.fullscreen:
+    window.fullscreen
   let cur = window.getDisplay().newCursorForDisplay(CursorType.blankCursor)
   let win = window.getWindow()
   win.setCursor(cur)
@@ -243,9 +245,6 @@ proc appActivate(app: Application) =
   let image = newImage()
   container.add(image)
 
-  if args.fullscreen:
-    window.fullscreen
-
   ## Connect the GTK signals to the procs
   var action: SimpleAction
 
@@ -270,7 +269,7 @@ proc appActivate(app: Application) =
   window.actionMap.addAction(action)
 
   window.connect("destroy", cleanUp, app)
-  window.connect("realize", hidePointer)
+  window.connect("realize", realizeWindow)
 
   window.showAll
   # Help is only shown on demand
