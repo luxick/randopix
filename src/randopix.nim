@@ -193,13 +193,17 @@ proc quit(action: SimpleAction; parameter: Variant; app: Application) =
   ## Application quit event
   cleanUp(window, app)
 
-proc realizeWindow(window: ApplicationWindow): void =
+proc realizeWindow(window: ApplicationWindow, image: Image): void =
   ## Hides the mouse pointer for the application.
   if args.fullscreen:
     window.fullscreen
   let cur = window.getDisplay().newCursorForDisplay(CursorType.blankCursor)
   let win = window.getWindow()
   win.setCursor(cur)
+
+  # Setting the inital image
+  # Fix 1 second timeout to make sure all other initialization has finished
+  updateTimeout = int(timeoutAdd(1000, timedUpdate, image))
 
 proc appActivate(app: Application) =
   # Parse arguments from the command line
@@ -269,15 +273,11 @@ proc appActivate(app: Application) =
   window.actionMap.addAction(action)
 
   window.connect("destroy", cleanUp, app)
-  window.connect("realize", realizeWindow)
+  window.connect("realize", realizeWindow, image)
 
   window.showAll
   # Help is only shown on demand
   helpBox.hide
-
-  # Setting the inital image
-  # Fix 1 second timeout to make sure all other initialization has finished
-  updateTimeout = int(timeoutAdd(1000, timedUpdate, image))
 
   ## open communication channel from the control server
   chan.open()
