@@ -22,9 +22,9 @@ type
     port: int           ## Port to host the control server
 
 var
-  imageProvider: ImageProvider  ## Gets images from the chosen source
-  args: Args                    ## The parsed command line args
-  updateTimeout: int            ## ID of the timeout that updates the images
+  imageProvider: ImageProvider      ## Gets images from the chosen source
+  args: Args                        ## The parsed command line args
+  updateTimeout, serverTimeout: int ## ID of the timeouts for image updating and server checking
   # Widgets
   window: ApplicationWindow
   label: Label
@@ -165,8 +165,6 @@ proc checkServerChannel(image: Image): bool =
 
     else:
       log "Command ignored: ", msg.command
-
-  sleep(100)
   result = true
 
 proc toggleFullscreen(action: SimpleAction; parameter: Variant; window: ApplicationWindow) =
@@ -285,7 +283,7 @@ proc appActivate(app: Application) =
   ## Start the server for handling incoming commands
   let serverArgs = ServerArgs(verbose: args.verbose, port: args.port)
   createThread(serverWorker, runServer, serverArgs)
-  discard idleAdd(checkServerChannel, image)
+  serverTimeout = int(timeoutAdd(100, checkServerChannel, image))
 
 when isMainModule:
   let app = newApplication("org.luxick.randopix")
