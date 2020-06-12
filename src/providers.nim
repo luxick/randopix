@@ -5,6 +5,7 @@ import common
 
 const
   supportedExts = @[".png", ".jpg", ".jpeg"]
+  placeholderImg = slurp("resources/blank.png")
   foxesUrl = "https://randomfox.ca/floof/"
   inspiroUrl = "http://inspirobot.me/api?generate=true"
 
@@ -75,6 +76,13 @@ func calcImageSize(maxWidth, maxHeight, imgWidth, imgHeight: int): tuple[width: 
 # Image Provider procs
 ########################
 
+proc getPlaceHolder(ip: ImageProvider): FileOpResult =
+  ## Provide the placeholder image.
+  ## This is used when no mode is active
+  let f = fmt"{tmpFile}.blank"
+  writeFile(f, placeholderImg)
+  return newFileOpResult(f)
+
 proc getFox(ip: ImageProvider): FileOpResult =
   ## Download image from the fox API
   try:
@@ -131,14 +139,14 @@ proc getLocalFile(ip: var ImageProvider): FileOpResult =
 proc getFileName(ip: var ImageProvider): FileOpResult =
   ## Get the temporary file name of the next file to display
   case ip.mode
+  of Mode.None:
+    return ip.getPlaceHolder()
   of Mode.File:
     return ip.getLocalFile()
   of Mode.Foxes:
     return ip.getFox()
   of Mode.Inspiro:
     return ip.getInspiro()
-  else:
-    return newFileOpResultError("Not implemented")
 
 ########################
 # Exported procs
@@ -147,8 +155,6 @@ proc getFileName(ip: var ImageProvider): FileOpResult =
 proc next*(ip: var ImageProvider, maxWidth, maxHeight: int): FileOpResult =
   ## Uses the image provider to get a new image ready to display.
   ## `width` and `height` should be the size of the window.
-  if ip.mode == Mode.None:
-    return newFileOpResultError("No mode active")
 
   let op = ip.getFileName()
   if not op.success: return op

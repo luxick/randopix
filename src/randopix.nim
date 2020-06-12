@@ -98,7 +98,6 @@ proc updateImage(image: Image): bool =
     if imageProvider.mode == Mode.None:
       log "No display mode"
       label.notify "No mode selected"
-      return true
 
     var wWidth, wHeight: int
     window.getSize(wWidth, wHeight)
@@ -110,7 +109,8 @@ proc updateImage(image: Image): bool =
       return
 
     image.setFromFile(op.file)
-    label.notify
+    if imageProvider.mode != Mode.None:
+      label.notify
   except:
     let
       e = getCurrentException()
