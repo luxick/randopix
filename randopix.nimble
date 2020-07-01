@@ -10,6 +10,8 @@ bin           = @["randopix", "pixctrl"]
 
 # Dependencies
 requires "nim >= 1.0.0", "gintro", "argparse", "jester", "ajax"
+# Not on nimble yet
+requires "https://github.com/luxick/op.git >= 1.0.0"
 
 proc genJS =
   echo "Generating JS Client"

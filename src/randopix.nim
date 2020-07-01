@@ -1,4 +1,5 @@
 import os, options, strformat
+import op
 import gintro/[glib, gobject, gtk, gio]
 import gintro/gdk except Window
 import argparse except run
@@ -102,13 +103,13 @@ proc updateImage(image: Image): bool =
     var wWidth, wHeight: int
     window.getSize(wWidth, wHeight)
 
-    let op = imageProvider.next(wWidth, wHeight)
-    result = op.success
-    if not op.success:
-      label.notify op.errorMsg
+    let r = imageProvider.next(wWidth, wHeight)
+    result = r.isOk
+    if not r.isOk:
+      label.notify r.error
       return
 
-    image.setFromFile(op.file)
+    image.setFromFile(r.val)
     if imageProvider.mode != Mode.None:
       label.notify
   except:

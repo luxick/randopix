@@ -1,6 +1,6 @@
 import os, sets, random, httpClient, json, strutils, strformat, options, deques, times
 from lenientops import `*`
-import gintro/[gdkpixbuf, gobject]
+import op, gintro/[gdkpixbuf, gobject]
 import common
 
 const
@@ -10,9 +10,6 @@ const
   inspiroUrl = "http://inspirobot.me/api?generate=true"
 
 type
-  FileOpResult* = object of OpResult
-    file*: string
-
   ImageProvider* = ref object of RootObj
     ## Manages images that should be displayed
     verbose: bool         ## Additional logging for the image provider
@@ -45,12 +42,6 @@ proc newImageProvider*(verbose: bool, mode: Mode): ImageProvider =
 proc newImageProvider*(verbose: bool, mode: Mode, path: string): ImageProvider =
   newImageProvider(verbose, mode, some(path))
 
-proc newFileOpResultError(msg: string): FileOpResult =
-  FileOpResult(success: false, errorMsg: msg)
-
-proc newFileOpResult(file: string): FileOpResult =
-  FileOpResult(success: true, file: file)
-
 ########################
 # Utilities
 ########################
@@ -76,14 +67,14 @@ func calcImageSize(maxWidth, maxHeight, imgWidth, imgHeight: int): tuple[width: 
 # Image Provider procs
 ########################
 
-proc getPlaceHolder(ip: ImageProvider): FileOpResult =
+proc getPlaceHolder(ip: ImageProvider): OP[string] =
   ## Provide the placeholder image.
   ## This is used when no mode is active
   let f = fmt"{tmpFile}.blank"
   writeFile(f, placeholderImg)
-  return newFileOpResult(f)
+  ok f
 
-proc getFox(ip: ImageProvider): FileOpResult =
+proc getFox(ip: ImageProvider): OP[string] =
   ## Download image from the fox API
   try:
     let urlData = client.getContent(foxesUrl)
@@ -91,15 +82,15 @@ proc getFox(ip: ImageProvider): FileOpResult =
     let imageData = client.getContent(info["image"].getStr)
     let dlFile = fmt"{tmpFile}.download"
     writeFile(dlFile, imageData)
-    return newFileOpResult(dlFile)
+    ok dlFile
   except JsonParsingError:
     ip.log fmt"Error while fetching from fox API: {getCurrentExceptionMsg()}"
-    return newFileOpResultError("Json parsing error")
+    fail[string] "Json parsing error"
   except KeyError:
     ip.log fmt"No image in downloaded data: {getCurrentExceptionMsg()}"
-    return newFileOpResultError("No image from API")
+    fail[string] "No image from API"
 
-proc getInspiro(ip: ImageProvider): FileOpResult =
+proc getInspiro(ip: ImageProvider): OP[string] =
   ## Download and save image from the inspiro API
   try:
     let imageUrl = client.getContent(inspiroUrl)
@@ -107,12 +98,12 @@ proc getInspiro(ip: ImageProvider): FileOpResult =
     let imageData = client.getContent(imageUrl)
     let dlFile = fmt"{tmpFile}.download"
     writeFile(dlFile,imageData)
-    return newFileOpResult(dlFile)
+    ok dlFile
   except:
     ip.log fmt"Unexpected error while downloading: {getCurrentExceptionMsg()}"
-    return newFileOpResultError(getCurrentExceptionMsg())
+    fail[string] getCurrentExceptionMsg()
 
-proc getLocalFile(ip: var ImageProvider): FileOpResult =
+proc getLocalFile(ip: var ImageProvider): OP[string] =
   ## Provide an image from a local folder
 
   # First, check if there are still images left to be loaded.
@@ -130,13 +121,13 @@ proc getLocalFile(ip: var ImageProvider): FileOpResult =
     for file in tmp:
       fileList.addLast(file)
   if fileList.len == 0:
-    return newFileOpResultError("No files found")
+    return fail[string] "No files found"
 
   let next = fileList.popFirst()
   # Remove the current file after
-  result = newFileOpResult(next)
+  ok next
 
-proc getFileName(ip: var ImageProvider): FileOpResult =
+proc getFileName(ip: var ImageProvider): OP[string] =
   ## Get the temporary file name of the next file to display
   case ip.mode
   of Mode.None:
@@ -152,14 +143,14 @@ proc getFileName(ip: var ImageProvider): FileOpResult =
 # Exported procs
 ########################
 
-proc next*(ip: var ImageProvider, maxWidth, maxHeight: int): FileOpResult =
+proc next*(ip: var ImageProvider, maxWidth, maxHeight: int): OP[string] =
   ## Uses the image provider to get a new image ready to display.
   ## `width` and `height` should be the size of the window.
 
-  let op = ip.getFileName()
-  if not op.success: return op
+  let r = ip.getFileName()
+  if not r.isOk: return r
 
-  var rawPixbuf = newPixbufFromFile(op.file)
+  var rawPixbuf = newPixbufFromFile(r.val)
   # Resize the pixbuf to best fit on screen
   let size = calcImageSize(maxWidth, maxHeight, rawPixbuf.width, rawPixbuf.height)
   ip.log "Scale image to: ", size
@@ -171,13 +162,13 @@ proc next*(ip: var ImageProvider, maxWidth, maxHeight: int): FileOpResult =
   # directly setting the image from a pixbuf will leak memory
   let saved = pixbuf.savev(tmpFile, "png", @[])
   if not saved:
-    return newFileOpResultError("Error while saving temporary image")
+    return result.fail "Error while saving temporary image"
 
   # GTK pixbuf leaks memory when not manually decreasing reference count
   pixbuf.unref()
   rawPixbuf.unref()
 
-  newFileOpResult(tmpFile)
+  ok tmpFile
 
 createDir(tmpDir)
 randomize()
